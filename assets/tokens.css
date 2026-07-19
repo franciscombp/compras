@@ -185,6 +185,11 @@ main[data-view="historial"] #view-historial { display: block; animation: screen-
   border-radius: var(--radius-m);
   padding: 20px;
   box-shadow: var(--shadow-1);
+  transition: all var(--dur) var(--ease);
+}
+.card:hover {
+  box-shadow: var(--shadow-2);
+  border-color: color-mix(in oklab, var(--brand) 20%, var(--line));
 }
 
 .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -221,15 +226,20 @@ button { font: inherit; color: inherit; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: 52px; padding: 12px 22px;
+  min-height: 52px; padding: 12px 24px;
   border: none; border-radius: var(--radius-full);
   background: var(--brand); color: var(--on-brand);
   font-size: 15px; font-weight: 650; letter-spacing: .01em;
   cursor: pointer;
-  transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease), background var(--dur) var(--ease);
+  transition: all var(--dur) var(--ease);
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--brand) 25%, transparent);
 }
-.btn:active { transform: scale(.97); }
-.btn:disabled { opacity: .4; pointer-events: none; }
+.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px color-mix(in oklab, var(--brand) 35%, transparent);
+}
+.btn:active:not(:disabled) { transform: scale(.96); }
+.btn:disabled { opacity: .5; pointer-events: none; }
 .btn[hidden] { display: none; }
 .btn svg { width: 18px; height: 18px; }
 
@@ -267,9 +277,14 @@ button { font: inherit; color: inherit; }
   border: 1px solid var(--line-strong); border-radius: 14px;
   background: var(--surface); color: var(--ink);
   padding: 0 14px; font-size: 16px;
-  transition: border-color var(--dur) var(--ease);
+  transition: all var(--dur) var(--ease);
 }
-.input:focus { border-color: var(--brand); outline: none; }
+.input:focus {
+  border-color: var(--brand);
+  outline: none;
+  box-shadow: 0 0 0 8px color-mix(in oklab, var(--brand) 8%, transparent),
+              inset 0 1px 2px color-mix(in oklab, var(--brand) 5%, transparent);
+}
 .input::placeholder { color: var(--ink-3); }
 .input:disabled { color: var(--ink-3); background: var(--surface-2); }
 
