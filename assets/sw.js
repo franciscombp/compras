@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CACHE_NAME = `quanto-${CACHE_VERSION}`;
 const SCOPE = new URL('.', self.location).pathname;
 const ASSETS_TO_CACHE = [
