@@ -1546,33 +1546,35 @@ function openAddItemSheet(prefill = {}) {
 }
 
 function configurarDictado() {
-  const btn = $("#aiVoz", sheetContent);
-  const estado = $("#aiVozEstado", sheetContent);
+  const btn = $(“#wzVoz”, sheetContent);
+  const estado = $(“#wzVozEstado”, sheetContent);
+  if (!btn || !estado) return;
+
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
-    btn.hidden = true;
+    btn.style.display = “none”;
     return;
   }
   let escuchando = false;
   let rec = null;
-  btn.addEventListener("click", () => {
+  btn.addEventListener(“click”, () => {
     if (escuchando) { rec?.stop(); return; }
     rec = new SR();
-    rec.lang = "es-EC";
+    rec.lang = “es-EC”;
     rec.interimResults = false;
     rec.maxAlternatives = 1;
     escuchando = true;
-    estado.innerHTML = `<span class="voice-listening"><span class="voice-dot"></span>Escuchando… di algo como “dos leches a noventa y ocho centavos”.</span>`;
+    estado.innerHTML = `Escuchando…`;
     rec.onresult = (ev) => {
       const datos = parseVoz(ev.results[0][0].transcript);
-      if (datos.nombre) $("#aiNombre", sheetContent).value = datos.nombre;
-      if (datos.precio !== null) $("#aiPrecio", sheetContent).value = datos.precio;
-      if (datos.cantidad > 1) $("#aiCantidad", sheetContent).value = datos.cantidad;
+      if (datos.nombre) $(“#wzNombre”, sheetContent).value = datos.nombre;
+      if (datos.precio !== null) $(“#wzPrecio”, sheetContent).value = datos.precio;
+      if (datos.cantidad > 1) $(“#wzCantidad”, sheetContent).value = datos.cantidad;
       estado.textContent = `Escuché: “${ev.results[0][0].transcript}”`;
     };
     rec.onerror = (ev) => {
-      estado.textContent = ev.error === "not-allowed"
-        ? "El micrófono está bloqueado para este sitio. Actívalo en el candado de la barra de direcciones."
+      estado.textContent = ev.error === “not-allowed”
+        ? “Micrófono bloqueado”
         : "No se pudo escuchar. Intenta otra vez.";
     };
     rec.onend = () => { escuchando = false; };
