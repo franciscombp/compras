@@ -436,7 +436,7 @@ function renderResultadosComparacion() {
 
   const trucos = resto
     .filter((r) => r.unidades > 1 && r.totalContenido < mejor.totalContenido && r.normalizado > mejor.normalizado)
-    .map((r) => `“${esc(r.etiqueta)}” parece más barato, pero trae menos producto en total (${r.totalContenido} ${r.unidad} vs ${mejor.totalContenido} ${mejor.unidad}).`);
+    .map((r) => `"${esc(r.etiqueta)}" parece más barato, pero trae menos producto en total (${r.totalContenido} ${r.unidad} vs ${mejor.totalContenido} ${mejor.unidad}).`);
 
   box.innerHTML = `
     <div class="result-winner ${winnerNuevo ? "" : "no-anim"}">
@@ -485,7 +485,7 @@ function renderResultadosComparacion() {
     flyToNav(btn);
     btn.innerHTML = `${icon("check")} Agregado`;
     btn.disabled = true;
-    toast(`Agregado a “${nombreListaActiva()}”`);
+    toast(`Agregado a "${nombreListaActiva()}"`);
     setTimeout(() => {
       if (document.body.contains(btn)) {
         btn.innerHTML = `${icon("plus")} Agregar a mi lista`;
@@ -1044,7 +1044,7 @@ function crearItemDesdeCaptura(cap, origin) {
   });
   cap.agregadaComo = item.id;
   if (origin) flyToNav(origin);
-  toast(`En tu carrito · “${nombreListaActiva()}”`);
+  toast(`En tu carrito · "${nombreListaActiva()}"`);
   renderScanTray();
 }
 
@@ -1052,7 +1052,7 @@ function openDuplicadoSheet(cap, existente) {
   const enCarrito = existente.estado_compra === "en_carrito";
   openSheet(`
     <h2 class="sheet-title">${enCarrito ? "Ya está en tu carrito" : "Ya está en tu lista"}</h2>
-    <p class="sheet-sub">“${esc(existente.nombre)}” ${enCarrito ? "ya está marcado en el carrito" : "está en tu lista de compras"}. ¿Qué hacemos con esta lectura de ${fmt(cap.precio)}?</p>
+    <p class="sheet-sub">"${esc(existente.nombre)}" ${enCarrito ? "ya está marcado en el carrito" : "está en tu lista de compras"}. ¿Qué hacemos con esta lectura de ${fmt(cap.precio)}?</p>
     <div class="button-col">
       ${enCarrito
         ? `<button class="btn btn-block" id="dupActualizar">Actualizar su precio a ${fmt(cap.precio)}</button>`
@@ -1554,35 +1554,35 @@ function openAddItemSheet(prefill = {}) {
 }
 
 function configurarDictado() {
-  const btn = $(“#wzVoz”, sheetContent);
-  const estado = $(“#wzVozEstado”, sheetContent);
+  const btn = $("#wzVoz", sheetContent);
+  const estado = $("#wzVozEstado", sheetContent);
   if (!btn || !estado) return;
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
-    btn.style.display = “none”;
+    btn.style.display = "none";
     return;
   }
   let escuchando = false;
   let rec = null;
-  btn.addEventListener(“click”, () => {
+  btn.addEventListener("click", () => {
     if (escuchando) { rec?.stop(); return; }
     rec = new SR();
-    rec.lang = “es-EC”;
+    rec.lang = "es-EC";
     rec.interimResults = false;
     rec.maxAlternatives = 1;
     escuchando = true;
     estado.innerHTML = `Escuchando…`;
     rec.onresult = (ev) => {
       const datos = parseVoz(ev.results[0][0].transcript);
-      if (datos.nombre) $(“#wzNombre”, sheetContent).value = datos.nombre;
-      if (datos.precio !== null) $(“#wzPrecio”, sheetContent).value = datos.precio;
-      if (datos.cantidad > 1) $(“#wzCantidad”, sheetContent).value = datos.cantidad;
-      estado.textContent = `Escuché: “${ev.results[0][0].transcript}”`;
+      if (datos.nombre) $("#wzNombre", sheetContent).value = datos.nombre;
+      if (datos.precio !== null) $("#wzPrecio", sheetContent).value = datos.precio;
+      if (datos.cantidad > 1) $("#wzCantidad", sheetContent).value = datos.cantidad;
+      estado.textContent = `Escuché: "${ev.results[0][0].transcript}"`;
     };
     rec.onerror = (ev) => {
-      estado.textContent = ev.error === “not-allowed”
-        ? “Micrófono bloqueado”
+      estado.textContent = ev.error === "not-allowed"
+        ? "Micrófono bloqueado"
         : "No se pudo escuchar. Intenta otra vez.";
     };
     rec.onend = () => { escuchando = false; };
@@ -1644,7 +1644,7 @@ function openItemSheet(item) {
   });
   $("#itAplazar", sheetContent)?.addEventListener("click", () => {
     aplazarItem(item.id, null);
-    closeSheet(); toast("Movido a “Para después”"); renderListas();
+    closeSheet(); toast("Movido a "Para después""); renderListas();
   });
   $("#itReactivar", sheetContent)?.addEventListener("click", () => {
     reactivarItem(item.id);
@@ -1778,7 +1778,7 @@ function mostrarResultadoCierre(lista, detalle) {
   const menos = dif <= 0;
   openSheet(`
     <h2 class="sheet-title">Compra cerrada</h2>
-    <p class="sheet-sub">“${esc(lista.nombre)}” quedó archivada en el historial.</p>
+    <p class="sheet-sub">"${esc(lista.nombre)}" quedó archivada en el historial.</p>
     <span class="chip ${menos ? "chip-menos" : "chip-mas"}" style="font-size:14px; padding:8px 16px">
       ${menos ? `Pagaste ${fmt(Math.abs(dif))} menos de lo esperado` : `Pagaste ${fmt(dif)} más de lo esperado`}
     </span>
