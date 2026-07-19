@@ -1434,6 +1434,7 @@ function openAddItemSheet(prefill = {}) {
                   placeholder="0.00"
                   step="0.01" min="0" max="9999"
                   inputmode="decimal"
+                  autocomplete="off"
                   style="width:120px; text-align:center">
               </div>
             </div>
@@ -1454,6 +1455,7 @@ function openAddItemSheet(prefill = {}) {
                   placeholder="1"
                   step="1" min="1" max="99"
                   inputmode="numeric"
+                  autocomplete="off"
                   style="width:90px; text-align:center">
                 <span class="unit">unid.</span>
               </div>
@@ -1475,6 +1477,7 @@ function openAddItemSheet(prefill = {}) {
                   placeholder="170"
                   step="any" min="0" max="9999"
                   inputmode="decimal"
+                  autocomplete="off"
                   style="grid-column:1">
                 <select class="input-hero" id="wzUnidad" style="grid-column:2; width:90px; text-align:center">
                   <option value="g" ${wizard.datos.unidad_medida === "g" ? "selected" : ""}>g</option>
