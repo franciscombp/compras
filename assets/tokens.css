@@ -570,6 +570,89 @@ button { font: inherit; color: inherit; }
 .sheet-title { font-size: 19px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 6px; }
 .sheet-sub { font-size: 13.5px; color: var(--ink-2); margin: 0 0 18px; }
 
+/* ======================== Wizard / Multi-paso ========================== */
+
+.wizard-screen {
+  display: none;
+  animation: screen-in var(--dur) var(--ease);
+}
+.wizard-screen.active { display: flex; flex-direction: column; }
+.wizard-screen[data-step="0"].active { display: flex; } /* primer paso siempre visible */
+
+.wizard-container {
+  display: flex; flex-direction: column; gap: 0; min-height: 100%;
+}
+
+.wizard-progress {
+  display: flex; gap: 4px; margin-bottom: 24px; padding: 0;
+}
+.wizard-progress .step {
+  flex: 1; height: 3px; border-radius: var(--radius-full);
+  background: var(--surface-2); transition: background var(--dur) var(--ease);
+}
+.wizard-progress .step.active { background: var(--brand); }
+.wizard-progress .step.done { background: var(--brand); }
+
+.wizard-content {
+  flex: 1; display: flex; flex-direction: column; justify-content: space-between;
+  min-height: 200px;
+}
+
+.wizard-field-hero {
+  margin-bottom: 24px;
+}
+.wizard-field-hero .label {
+  display: block; font-size: 13px; font-weight: 600;
+  color: var(--ink-3); margin-bottom: 8px; text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.wizard-field-hero .input-hero {
+  width: 100%; min-height: 72px;
+  font-size: 32px; font-weight: 700; letter-spacing: -.02em;
+  border: 2px solid var(--line-strong); border-radius: 18px;
+  background: var(--surface); color: var(--ink);
+  padding: 16px 20px; text-align: center;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  font-variant-numeric: tabular-nums;
+}
+.wizard-field-hero .input-hero:focus {
+  outline: none; border-color: var(--brand);
+  box-shadow: 0 0 0 8px color-mix(in oklab, var(--brand) 10%, transparent);
+}
+.wizard-field-hero .input-hero::placeholder { color: var(--ink-3); opacity: .5; }
+
+.wizard-hint {
+  font-size: 13px; color: var(--ink-2); margin-top: 8px; text-align: center;
+}
+
+.wizard-summary {
+  background: var(--surface-2); border-radius: 14px;
+  padding: 16px; margin: 16px 0;
+}
+.wizard-summary-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; font-size: 14px;
+}
+.wizard-summary-row:not(:last-child) { border-bottom: 1px solid var(--line); }
+.wizard-summary-row strong { color: var(--ink); }
+.wizard-summary-row .value { color: var(--ink-2); tabular-nums; }
+
+.wizard-actions {
+  display: flex; gap: 10px; margin-top: 20px;
+}
+.wizard-actions .btn { flex: 1; }
+.wizard-actions .btn-back { flex: 0 1 44px; padding: 12px; }
+
+/* Número grande con unidad pequeña */
+.wizard-big-number {
+  display: flex; align-items: baseline; justify-content: center; gap: 8px;
+  font-size: 60px; font-weight: 750;
+  color: var(--brand-deep);
+}
+.wizard-big-number .unit {
+  font-size: 20px; color: var(--ink-2); margin-bottom: 8px;
+}
+
 /* ========================== Navegación inferior ========================= */
 
 .navbar {

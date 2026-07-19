@@ -1298,54 +1298,251 @@ function openOpcionesListaSheet(lista) {
 
 // --------------------------- Item: agregar / editar -------------------------
 
+/**
+ * Wizard multi-paso tipo Airbnb para agregar items.
+ * Flujo: nombre → precio → cantidad → contenido → resumen → confirmar
+ */
 function openAddItemSheet(prefill = {}) {
-  openSheet(`
-    <h2 class="sheet-title">Agregar item</h2>
-    ${prefill.fuente === "ocr" ? `<p class="sheet-sub">Datos leídos de la etiqueta — revísalos antes de guardar.</p>` : `<p class="sheet-sub">Se guarda con precio estimado; lo verificas en la tienda.</p>`}
-    <div class="field">
-      <label for="aiNombre">Nombre</label>
-      <div style="display:flex; gap:8px">
-        <input class="input" id="aiNombre" value="${esc(prefill.nombre || "")}" placeholder="Ej. Leche entera 1L" style="flex:1">
-        <button class="icon-btn" id="aiVoz" aria-label="Dictar por voz">${icon("mic")}</button>
-      </div>
-      <p class="micro" id="aiVozEstado" style="margin-top:6px"></p>
-    </div>
-    <div class="field-grid">
-      <div class="field"><label for="aiPrecio">Precio estimado</label><input class="input tabular" id="aiPrecio" type="number" inputmode="decimal" step="0.01" min="0" value="${prefill.precio ?? ""}" placeholder="0.00"></div>
-      <div class="field"><label for="aiCantidad">Cantidad</label><input class="input tabular" id="aiCantidad" type="number" inputmode="numeric" step="1" min="1" value="${prefill.cantidad || 1}"></div>
-    </div>
-    <div class="field-grid">
-      <div class="field"><label for="aiContenido">Contenido (opcional)</label><input class="input tabular" id="aiContenido" type="number" inputmode="decimal" step="any" min="0" value="${prefill.contenido ?? ""}" placeholder="Ej. 170"></div>
-      <div class="field"><label for="aiUnidad">Unidad</label><select class="input" id="aiUnidad">
-        <option value="g" ${(prefill.unidad_medida || "g") === "g" ? "selected" : ""}>g</option>
-        <option value="ml" ${prefill.unidad_medida === "ml" ? "selected" : ""}>ml</option>
-        <option value="unidad" ${prefill.unidad_medida === "unidad" ? "selected" : ""}>unidad</option>
-      </select></div>
-    </div>
-    <div class="button-col">
-      <button class="btn btn-block" id="aiGuardar">Guardar en la lista</button>
-      <button class="btn btn-quiet" id="aiCancelar">Cancelar</button>
-    </div>`);
+  const wizard = {
+    step: 0,
+    datos: {
+      nombre: prefill.nombre || "",
+      precio: prefill.precio ?? null,
+      cantidad: prefill.cantidad || 1,
+      contenido: prefill.contenido ?? null,
+      unidad_medida: prefill.unidad_medida || "g",
+    },
+  };
 
-  configurarDictado();
+  const renderStep = () => {
+    const paso = wizard.step;
+    const d = wizard.datos;
+    const puedeAvanzar = paso === 0 ? d.nombre.trim().length >= 2
+      : paso === 1 ? d.precio !== null && d.precio > 0
+        : paso === 2 ? d.cantidad > 0
+          : paso === 3 ? !d.contenido || d.contenido > 0
+            : true;
 
-  $("#aiGuardar", sheetContent).addEventListener("click", (ev) => {
-    flyToNav(ev.currentTarget);
-    const contenido = Number($("#aiContenido", sheetContent).value || 0);
+    // Actualizar progreso
+    $$(".wizard-progress .step", sheetContent).forEach((el, i) => {
+      el.classList.toggle("active", i === paso);
+      el.classList.toggle("done", i < paso);
+    });
+
+    // Mostrar/ocultar pasos
+    $$(".wizard-screen", sheetContent).forEach((el, i) => {
+      el.classList.toggle("active", i === paso);
+    });
+
+    // Botones de navegación
+    const btnSig = $("#wizardSiguiente", sheetContent);
+    const btnAnt = $("#wizardAnterior", sheetContent);
+    if (btnSig) btnSig.disabled = !puedeAvanzar;
+    if (btnAnt) btnAnt.style.display = paso === 0 ? "none" : "";
+  };
+
+  const avanzar = () => {
+    if (wizard.step < 4) wizard.step++;
+    renderStep();
+    // Auto-focus al input hero del paso siguiente
+    setTimeout(() => {
+      const input = $(".input-hero:not(:disabled)", sheetContent);
+      if (input) input.focus();
+    }, 100);
+  };
+
+  const retroceder = () => {
+    if (wizard.step > 0) wizard.step--;
+    renderStep();
+  };
+
+  const guardar = () => {
+    flyToNav();
+    const contenido = Number(wizard.datos.contenido || 0);
     guardarProducto({
-      nombre: $("#aiNombre", sheetContent).value.trim() || "Producto",
-      cantidad: Number($("#aiCantidad", sheetContent).value || 1),
-      precio_estimado: Number($("#aiPrecio", sheetContent).value || 0),
+      nombre: wizard.datos.nombre.trim() || "Producto",
+      cantidad: wizard.datos.cantidad,
+      precio_estimado: wizard.datos.precio,
       contenido: contenido > 0 ? contenido : null,
-      unidad_medida: contenido > 0 ? $("#aiUnidad", sheetContent).value : null,
+      unidad_medida: contenido > 0 ? wizard.datos.unidad_medida : null,
       estado_precio: "estimado",
       fuente: prefill.fuente || "manual",
     });
     closeSheet();
     toast("Item agregado");
     renderView(state.view);
+  };
+
+  openSheet(`
+    <div class="wizard-container">
+      <h2 class="sheet-title">Agregar item</h2>
+
+      <div class="wizard-progress">
+        <div class="step"></div>
+        <div class="step"></div>
+        <div class="step"></div>
+        <div class="step"></div>
+        <div class="step"></div>
+      </div>
+
+      <!-- Paso 0: Nombre -->
+      <div class="wizard-screen" data-step="0">
+        <div class="wizard-content">
+          <div>
+            <div class="wizard-field-hero">
+              <label class="label">¿Qué producto?</label>
+              <input class="input-hero" id="wzNombre" type="text"
+                value="${esc(wizard.datos.nombre)}"
+                placeholder="Leche, pan, café…"
+                maxlength="50">
+              <div class="wizard-hint">Por ejemplo: "Leche entera 1L" o "Pan integral"</div>
+            </div>
+            <p class="micro" id="wzVozEstado" style="margin-top:12px"></p>
+          </div>
+          <button class="icon-btn" id="wzVoz" aria-label="Dictar" style="align-self:flex-end; margin:12px 0 0">${icon("mic")}</button>
+        </div>
+      </div>
+
+      <!-- Paso 1: Precio -->
+      <div class="wizard-screen" data-step="1">
+        <div class="wizard-content">
+          <div style="text-align:center">
+            <p class="sheet-sub">Precio total</p>
+            <div style="margin:32px 0">
+              <div class="wizard-big-number">
+                <span>$</span>
+                <input class="input-hero" id="wzPrecio" type="number"
+                  value="${wizard.datos.precio ?? ""}"
+                  placeholder="0.00"
+                  step="0.01" min="0" max="9999"
+                  inputmode="decimal"
+                  style="width:120px; text-align:center">
+              </div>
+            </div>
+            <div class="wizard-hint">Precio que viste en la etiqueta</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paso 2: Cantidad -->
+      <div class="wizard-screen" data-step="2">
+        <div class="wizard-content">
+          <div style="text-align:center">
+            <p class="sheet-sub">¿Cuántos vas a llevar?</p>
+            <div style="margin:40px 0 32px">
+              <div class="wizard-big-number">
+                <input class="input-hero" id="wzCantidad" type="number"
+                  value="${wizard.datos.cantidad}"
+                  placeholder="1"
+                  step="1" min="1" max="99"
+                  inputmode="numeric"
+                  style="width:90px; text-align:center">
+                <span class="unit">unid.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paso 3: Contenido (opcional) -->
+      <div class="wizard-screen" data-step="3">
+        <div class="wizard-content">
+          <div>
+            <p class="sheet-sub">¿Cuánto contiene cada uno? (opcional)</p>
+            <div class="wizard-field-hero" style="margin-top:24px">
+              <label class="label">Contenido por envase</label>
+              <div style="display:grid; grid-template-columns:1fr auto; gap:12px">
+                <input class="input-hero" id="wzContenido" type="number"
+                  value="${wizard.datos.contenido ?? ""}"
+                  placeholder="170"
+                  step="any" min="0" max="9999"
+                  inputmode="decimal"
+                  style="grid-column:1">
+                <select class="input-hero" id="wzUnidad" style="grid-column:2; width:90px; text-align:center">
+                  <option value="g" ${wizard.datos.unidad_medida === "g" ? "selected" : ""}>g</option>
+                  <option value="ml" ${wizard.datos.unidad_medida === "ml" ? "selected" : ""}>ml</option>
+                  <option value="unidad" ${wizard.datos.unidad_medida === "unidad" ? "selected" : ""}>un.</option>
+                </select>
+              </div>
+              <div class="wizard-hint">Lo usa para calcular precio por 100g/ml</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Paso 4: Resumen -->
+      <div class="wizard-screen" data-step="4">
+        <div class="wizard-content">
+          <div>
+            <p class="sheet-sub">¿Todo correcto?</p>
+            <div class="wizard-summary">
+              <div class="wizard-summary-row">
+                <strong>Producto</strong>
+                <span class="value">${esc(wizard.datos.nombre)}</span>
+              </div>
+              <div class="wizard-summary-row">
+                <strong>Precio</strong>
+                <span class="value">${fmt(wizard.datos.precio)}</span>
+              </div>
+              <div class="wizard-summary-row">
+                <strong>Cantidad</strong>
+                <span class="value">${wizard.datos.cantidad} unid.</span>
+              </div>
+              ${wizard.datos.contenido ? `
+                <div class="wizard-summary-row">
+                  <strong>Contenido</strong>
+                  <span class="value">${wizard.datos.contenido} ${wizard.datos.unidad_medida}</span>
+                </div>` : ""}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Botones de navegación -->
+      <div class="wizard-actions">
+        <button class="btn btn-ghost btn-back" id="wizardAnterior" aria-label="Anterior">${icon("back")}</button>
+        <button class="btn btn-block" id="wizardSiguiente">Siguiente</button>
+      </div>
+    </div>`);
+
+  // Setup listeners
+  configurarDictado();
+
+  $("#wzNombre", sheetContent)?.addEventListener("input", (e) => {
+    wizard.datos.nombre = e.target.value;
   });
-  $("#aiCancelar", sheetContent).addEventListener("click", closeSheet);
+  $("#wzNombre", sheetContent)?.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") avanzar();
+  });
+
+  $("#wzPrecio", sheetContent)?.addEventListener("input", (e) => {
+    wizard.datos.precio = e.target.value ? parseNumero(e.target.value) : null;
+  });
+  $("#wzPrecio", sheetContent)?.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") avanzar();
+  });
+
+  $("#wzCantidad", sheetContent)?.addEventListener("input", (e) => {
+    wizard.datos.cantidad = Math.max(1, Number(e.target.value || 1));
+  });
+
+  $("#wzContenido", sheetContent)?.addEventListener("input", (e) => {
+    wizard.datos.contenido = e.target.value ? parseNumero(e.target.value) : null;
+  });
+
+  $("#wzUnidad", sheetContent)?.addEventListener("change", (e) => {
+    wizard.datos.unidad_medida = e.target.value;
+  });
+
+  $("#wizardAnterior", sheetContent).addEventListener("click", retroceder);
+  $("#wizardSiguiente", sheetContent).addEventListener("click", () => {
+    if (wizard.step === 4) guardar();
+    else avanzar();
+  });
+
+  renderStep();
+  // Focus inicial
+  setTimeout(() => $(".input-hero", sheetContent)?.focus(), 100);
 }
 
 function configurarDictado() {
