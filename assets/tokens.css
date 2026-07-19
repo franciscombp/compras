@@ -197,22 +197,17 @@ main[data-view="historial"] #view-historial { display: block; animation: screen-
 .action-tile {
   display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
   background: var(--surface);
-  border: 1.5px solid var(--line);
+  border: 1px solid var(--line);
   border-radius: var(--radius-m);
   padding: 18px;
   min-height: 128px;
   box-shadow: var(--shadow-1);
   color: var(--ink);
   font: inherit; text-align: left; cursor: pointer;
-  transition: all var(--dur) var(--ease);
+  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
-.action-tile:hover {
-  border-color: var(--brand);
-  background: color-mix(in oklab, var(--brand) 2%, var(--surface));
-  box-shadow: 0 4px 16px color-mix(in oklab, var(--brand) 12%, rgba(0,0,0,.05));
-  transform: translateY(-2px);
-}
-.action-tile:active { transform: scale(.97); }
+.action-tile:active { transform: scale(.98); }
+.action-tile:hover { border-color: var(--line-strong); }
 .action-tile .tile-title { display: block; font-size: 15px; font-weight: 650; }
 .action-tile .tile-caption { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
 
