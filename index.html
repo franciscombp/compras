@@ -3,8 +3,23 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#166a4a" />
+<meta name="description" content="Compara el precio real de productos por 100 g/ml y lleva tus listas con memoria de precios" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Quanto" />
 <title>Quanto — precio justo</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23166a4a' width='192' height='192' rx='40'/><g fill='%23fff'><path d='M96 28c12 0 22 10 22 22v50h34c6 0 12 6 12 12s-6 12-12 12h-34v28c0 12-10 22-22 22s-22-10-22-22v-28H40c-6 0-12-6-12-12s6-12 12-12h34V50c0-12 10-22 22-22Z'/></g></svg>" />
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23166a4a' width='192' height='192' rx='40'/><g fill='%23fff'><path d='M96 28c12 0 22 10 22 22v50h34c6 0 12 6 12 12s-6 12-12 12h-34v28c0 12-10 22-22 22s-22-10-22-22v-28H40c-6 0-12-6-12-12s6-12 12-12h34V50c0-12 10-22 22-22Z'/></g></svg>" />
+<link rel="manifest" href="./manifest.json" />
 <link rel="stylesheet" href="./assets/tokens.css" />
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./assets/sw.js').catch(() => {});
+  });
+}
+</script>
 </head>
 <body>
 
