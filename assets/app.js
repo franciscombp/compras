@@ -1400,12 +1400,13 @@ function openAddItemSheet(prefill = {}) {
         <div class="wizard-content">
           <div>
             <div class="wizard-field-hero">
-              <label class="label">¿Qué producto?</label>
+              <p class="sheet-sub">¿Qué vamos a llevar?</p>
               <input class="input-hero" id="wzNombre" type="text"
                 value="${esc(wizard.datos.nombre)}"
-                placeholder="Leche, pan, café…"
-                maxlength="50">
-              <div class="wizard-hint">Por ejemplo: "Leche entera 1L" o "Pan integral"</div>
+                placeholder="Ej. Leche entera 1L"
+                maxlength="50"
+                autocomplete="off">
+              <div class="wizard-hint">Sé específico: marca, volumen, tipo</div>
             </div>
             <p class="micro" id="wzVozEstado" style="margin-top:12px"></p>
           </div>
@@ -1417,7 +1418,7 @@ function openAddItemSheet(prefill = {}) {
       <div class="wizard-screen" data-step="1">
         <div class="wizard-content">
           <div style="text-align:center">
-            <p class="sheet-sub">Precio total</p>
+            <p class="sheet-sub">¿Cuánto cuesta?</p>
             <div style="margin:32px 0">
               <div class="wizard-big-number">
                 <span>$</span>
@@ -1430,7 +1431,7 @@ function openAddItemSheet(prefill = {}) {
                   style="width:120px; text-align:center">
               </div>
             </div>
-            <div class="wizard-hint">Precio que viste en la etiqueta</div>
+            <div class="wizard-hint">Precio total de la etiqueta</div>
           </div>
         </div>
       </div>
@@ -1460,9 +1461,9 @@ function openAddItemSheet(prefill = {}) {
       <div class="wizard-screen" data-step="3">
         <div class="wizard-content">
           <div>
-            <p class="sheet-sub">¿Cuánto contiene cada uno? (opcional)</p>
+            <p class="sheet-sub">Detalles (opcional)</p>
             <div class="wizard-field-hero" style="margin-top:24px">
-              <label class="label">Contenido por envase</label>
+              <label class="label">Contenido de cada uno</label>
               <div style="display:grid; grid-template-columns:1fr auto; gap:12px">
                 <input class="input-hero" id="wzContenido" type="number"
                   value="${wizard.datos.contenido ?? ""}"
@@ -1477,7 +1478,7 @@ function openAddItemSheet(prefill = {}) {
                   <option value="unidad" ${wizard.datos.unidad_medida === "unidad" ? "selected" : ""}>un.</option>
                 </select>
               </div>
-              <div class="wizard-hint">Lo usa para calcular precio por 100g/ml</div>
+              <div class="wizard-hint">Ayuda a calcular el precio real por 100g/ml</div>
             </div>
           </div>
         </div>
