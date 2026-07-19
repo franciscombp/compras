@@ -261,57 +261,49 @@ function renderCompareRows() {
 
   $("#compareRows").innerHTML = `
     <div class="compare-widget">
-      <div class="compare-progress">
-        <div class="compare-progress-meta">
-          <span class="compare-step-pill">Paso ${step + 1} de ${total}</span>
-          <span class="compare-step-copy">${total > 1 ? "Completa un producto a la vez y al terminar te muestro el ganador." : "Agrega otro producto para comparar."}</span>
-        </div>
-        <div class="compare-progress-bar">
-          <div class="compare-progress-fill" style="width:${((step + 1) / Math.max(total, 1)) * 100}%"></div>
-        </div>
+      <div class="compare-progress-dots">
+        ${Array.from({length: total}, (_, idx) => `<button class="dot ${idx === step ? "active" : idx < step ? "done" : ""}" data-go-to="${idx}" aria-label="Ir al producto ${idx + 1}"></button>`).join("")}
       </div>
 
       <div class="card compare-card" data-i="${i}">
-        <div class="compare-card-head">
-          <div>
-            <p class="compare-tag">Producto ${String.fromCharCode(65 + i)}</p>
-            <p class="compare-lede">Escribe lo básico y sigue con el siguiente.</p>
-          </div>
+        <div class="compare-card-remove">
           ${total > 1 ? `<button class="remove-row" data-remove="${i}" aria-label="Quitar producto ${String.fromCharCode(65 + i)}">✕</button>` : ""}
         </div>
 
-        <label class="field hero-field">
-          <span class="hero-label">¿Qué producto es?</span>
-          <input class="input hero-input" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="Ej. Atún en lata">
-        </label>
+        <div class="compare-focused-section">
+          <p class="compare-product-label">Producto ${String.fromCharCode(65 + i)}</p>
 
-        <div class="compare-unit-row" role="group" aria-label="Tipo de medida">
-          ${["g", "ml", "unidad"].map((u) => `<button type="button" class="unit-pill ${u === unidad ? "is-active" : ""}" data-unit="${u}" data-i="${i}">${u === "unidad" ? "unid." : u}</button>`).join("")}
-        </div>
-
-        <div class="compare-quick-row">
-          ${presets.slice(0, 3).map((v) => `<button type="button" class="quick-pill" data-quick="${v}" data-i="${i}">${v}${unidad === "unidad" ? " ud" : unidad === "ml" ? " ml" : " g"}</button>`).join("")}
-        </div>
-
-        <div class="field-grid-2">
-          <div class="field">
-            <label for="cmp-precio-${i}">Precio total</label>
-            <input class="input tabular" id="cmp-precio-${i}" data-k="precio" type="number" inputmode="decimal" step="0.01" min="0" value="${row.precio ?? ""}" placeholder="0.00">
+          <div class="compare-hero-group">
+            <input class="input hero-input" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="¿Qué es?" autocomplete="off">
           </div>
-          <div class="field">
-            <label for="cmp-cantidad-${i}">Contenido</label>
-            <input class="input tabular" id="cmp-cantidad-${i}" data-k="cantidad" type="number" inputmode="decimal" step="any" min="0" value="${row.cantidad ?? ""}" placeholder="${unidad === "unidad" ? "1" : unidad === "ml" ? "500" : "100"}">
+
+          <div class="compare-price-group">
+            <span class="price-prefix">$</span>
+            <input class="input hero-input price-input" id="cmp-precio-${i}" data-k="precio" type="number" inputmode="decimal" step="0.01" min="0" value="${row.precio ?? ""}" placeholder="0.00" autocomplete="off">
           </div>
         </div>
 
-        <div class="field-grid-2 compare-bottom">
-          <div class="field">
-            <label for="cmp-unidades-${i}">Nº de envases</label>
-            <input class="input tabular" id="cmp-unidades-${i}" data-k="unidades" type="number" inputmode="numeric" step="1" min="1" value="${row.unidades ?? 1}">
-          </div>
-          <div class="field">
-            <label>Resumen</label>
+        <div class="compare-details-section">
+          <div class="details-header">
+            <div class="compare-unit-row" role="group" aria-label="Unidad">
+              ${["g", "ml", "unidad"].map((u) => `<button type="button" class="unit-pill ${u === unidad ? "is-active" : ""}" data-unit="${u}" data-i="${i}">${u === "unidad" ? "unid." : u}</button>`).join("")}
+            </div>
             <div class="compare-summary" data-total-row="${i}"></div>
+          </div>
+
+          <div class="compare-quick-row">
+            ${presets.slice(0, 3).map((v) => `<button type="button" class="quick-pill" data-quick="${v}" data-i="${i}">${v}${unidad === "unidad" ? " ud" : unidad === "ml" ? " ml" : " g"}</button>`).join("")}
+          </div>
+
+          <div class="compare-quantity-fields">
+            <div class="qty-field">
+              <label for="cmp-cantidad-${i}" class="qty-label">Cantidad</label>
+              <input class="input tabular" id="cmp-cantidad-${i}" data-k="cantidad" type="number" inputmode="decimal" step="any" min="0" value="${row.cantidad ?? ""}" placeholder="${unidad === "unidad" ? "1" : unidad === "ml" ? "500" : "100"}" autocomplete="off">
+            </div>
+            <div class="qty-field">
+              <label for="cmp-unidades-${i}" class="qty-label">Envases</label>
+              <input class="input tabular" id="cmp-unidades-${i}" data-k="unidades" type="number" inputmode="numeric" step="1" min="1" value="${row.unidades ?? 1}" autocomplete="off">
+            </div>
           </div>
         </div>
       </div>
@@ -322,7 +314,7 @@ function renderCompareRows() {
       </div>
 
       <div class="compare-actions compare-actions-secondary">
-        <button class="btn btn-tonal" type="button" data-action="add-step">Agregar otro producto</button>
+        <button class="btn btn-tonal" type="button" data-action="add-step">Agregar otro</button>
       </div>
     </div>`;
   renderResultadosComparacion();

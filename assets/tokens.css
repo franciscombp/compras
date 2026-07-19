@@ -328,6 +328,22 @@ button { font: inherit; color: inherit; }
 /* ============================ Comparador ================================ */
 
 .compare-widget { display: grid; gap: 12px; }
+
+/* Progress indicator - smooth dots instead of numbered steps */
+.compare-progress-dots {
+  display: flex; gap: 6px; justify-content: center; padding: 16px 0 12px;
+}
+.compare-progress-dots .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface);
+  cursor: pointer; transition: all var(--dur) var(--ease);
+}
+.compare-progress-dots .dot.active {
+  background: var(--brand); border-color: var(--brand); transform: scale(1.3);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--brand) 50%, transparent);
+}
+.compare-progress-dots .dot.done { background: var(--brand-soft); border-color: var(--brand-line); }
+
 .compare-progress {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -355,30 +371,95 @@ button { font: inherit; color: inherit; }
   height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand), color-mix(in oklab, var(--brand) 70%, white));
   transition: width var(--dur) var(--ease);
 }
-.compare-card { position: relative; margin-bottom: 0; }
+.compare-card { position: relative; margin-bottom: 0; padding: 20px 16px; }
+.compare-card-remove {
+  position: absolute; top: 16px; right: 16px;
+}
 .compare-card .remove-row {
   width: 32px; height: 32px; border-radius: var(--radius-full);
   border: none; background: transparent; color: var(--ink-3);
-  font-size: 16px; cursor: pointer;
+  font-size: 16px; cursor: pointer; transition: color var(--dur) var(--ease);
 }
 .compare-card .remove-row:hover { color: var(--danger); }
-.compare-card-head {
-  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+
+.compare-product-label {
+  font-size: 12px; font-weight: 700; letter-spacing: .06em;
+  color: var(--ink-3); text-transform: uppercase; margin: 0 0 20px;
+}
+
+/* Main focus section - large inputs for name & price */
+.compare-focused-section {
+  text-align: center; margin-bottom: 28px;
+}
+
+.compare-hero-group {
+  margin-bottom: 24px;
+}
+
+.hero-input {
+  min-height: 64px; font-size: 22px; font-weight: 700;
+  padding: 12px 16px; letter-spacing: -.01em;
+}
+
+.compare-price-group {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-bottom: 0;
+}
+
+.price-prefix {
+  font-size: 20px; font-weight: 600; color: var(--ink-2);
+}
+
+.price-input {
+  min-height: 56px; font-size: 28px; font-weight: 750;
+  width: 140px; text-align: center; letter-spacing: -.01em;
+}
+
+/* Details section - compact inputs for optional fields */
+.compare-details-section {
+  background: var(--surface-2); border-radius: 16px; padding: 16px;
+}
+
+.details-header {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
   margin-bottom: 12px;
 }
-.compare-tag {
-  font-size: 12px; font-weight: 700; letter-spacing: .06em;
-  color: var(--ink-3); text-transform: uppercase; margin: 0 0 2px;
+
+.compare-unit-row {
+  flex: 0;
 }
-.compare-lede {
-  font-size: 12.5px; color: var(--ink-2); margin: 0;
+
+.compare-summary {
+  flex: 1; min-height: 40px; display: flex; align-items: center;
+  padding: 8px 12px; border-radius: 12px; background: var(--surface);
+  color: var(--ink-2); font-size: 12px; font-weight: 600;
+  text-align: right;
 }
+
+.compare-quick-row {
+  margin-bottom: 12px;
+}
+
+.compare-quantity-fields {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+
+.qty-field {
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.qty-label {
+  font-size: 11px; font-weight: 650; color: var(--ink-3);
+  letter-spacing: .04em; text-transform: uppercase;
+}
+
+.qty-field .input {
+  min-height: 44px; font-size: 14px; padding: 8px 10px;
+}
+
 .hero-field { margin-bottom: 12px; }
 .hero-label {
   display: block; font-size: 13px; font-weight: 650; color: var(--ink-2); margin-bottom: 6px;
-}
-.hero-input {
-  min-height: 54px; font-size: 16px; font-weight: 600;
 }
 .compare-unit-row, .compare-quick-row {
   display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
