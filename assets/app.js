@@ -1644,7 +1644,7 @@ function openItemSheet(item) {
   });
   $("#itAplazar", sheetContent)?.addEventListener("click", () => {
     aplazarItem(item.id, null);
-    closeSheet(); toast("Movido a "Para después""); renderListas();
+    closeSheet(); toast('Movido a "Para después"'); renderListas();
   });
   $("#itReactivar", sheetContent)?.addEventListener("click", () => {
     reactivarItem(item.id);
