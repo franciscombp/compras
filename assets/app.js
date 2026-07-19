@@ -1,5 +1,5 @@
 /**
- * Quanto — capa de UI.
+ * Quanto - capa de UI.
  * La capa de datos vive en data/store.js (localStorage + syncQueue) y no
  * se toca desde aquí salvo por sus funciones exportadas.
  *
@@ -34,7 +34,7 @@ function nuevaFilaComparacion(datos = {}) {
 // ---------------------------------------------------------------------------
 
 function fmt(n) {
-  return n === null || n === undefined || Number.isNaN(n) ? "—" : "$" + Number(n).toFixed(2);
+  return n === null || n === undefined || Number.isNaN(n) ? "-" : "$" + Number(n).toFixed(2);
 }
 
 function esc(s) {
@@ -560,7 +560,7 @@ async function leerEtiqueta(canvas) {
  *  - "antes / ahora": se queda con el precio de oferta, no con el tachado
  *  - packs: "6 x 80 g", "pack 6 unidades", "3 un x 170g"
  *  - medidas en g, kg, mg, ml, cc, cl, l, lb, oz (convierte a g / ml)
- *  - precio unitario ya impreso ("$3.99/kg", "1.25 por 100 g") — si la etiqueta
+ *  - precio unitario ya impreso ("$3.99/kg", "1.25 por 100 g") - si la etiqueta
  *    no trae gramaje, el contenido se deduce de ahí
  */
 function parseNumero(s) {
@@ -779,7 +779,7 @@ async function iniciarEscaneo() {
     if (state.view !== "escanear") { detenerCamara(); return; }
     video.srcObject = camaraStream;
     await video.play().catch(() => {});
-    setScanStatus("Encuadra el precio y captura — puedes tomar varias seguidas.");
+    setScanStatus("Encuadra el precio y captura - puedes tomar varias seguidas.");
     $("#scanCapture").disabled = false;
     getOcrWorker().catch(() => {}); // precalienta el OCR para la primera captura
   } catch (err) {
@@ -804,11 +804,11 @@ async function capturarEtiqueta() {
     const lectura = await leerEtiqueta(canvas);
     const datos = parseEtiqueta(lectura.texto);
     if (datos.precio === null && datos.contenido === null) {
-      setScanStatus("No se leyó un precio — acércate a la etiqueta y captura otra vez.");
+      setScanStatus("No se leyó un precio - acércate a la etiqueta y captura otra vez.");
       return;
     }
     const cap = agregarCaptura(datos, canvas);
-    setScanStatus(`Capturada: ${fmt(cap.precio)}${cap.contenido ? ` · ${cap.contenido} ${cap.unidad}` : ""} — lista para la siguiente.`);
+    setScanStatus(`Capturada: ${fmt(cap.precio)}${cap.contenido ? ` · ${cap.contenido} ${cap.unidad}` : ""} - lista para la siguiente.`);
   } catch (e) {
     setScanStatus("No se pudo cargar el lector (necesita conexión la primera vez). Reintenta.");
   } finally {
@@ -872,7 +872,7 @@ async function cicloAuto() {
       autoLentos++;
       if (autoLentos >= 2) {
         setAuto(false);
-        setScanStatus("El escaneo automático va lento en este dispositivo — mejor usa el botón Capturar.");
+        setScanStatus("El escaneo automático va lento en este dispositivo - mejor usa el botón Capturar.");
         return;
       }
     } else {
@@ -888,7 +888,7 @@ async function cicloAuto() {
     if (firma === autoFirmaPrevia && !yaCapturada) {
       flashCamara();
       const cap = agregarCaptura(datos, canvas);
-      setScanStatus(`Auto: capturada ${fmt(cap.precio)} ✓ — apunta a la siguiente etiqueta.`);
+      setScanStatus(`Auto: capturada ${fmt(cap.precio)} ✓ - apunta a la siguiente etiqueta.`);
       autoCooldownHasta = Date.now() + 3000;
       autoFirmaPrevia = null;
     } else {
@@ -946,7 +946,7 @@ function renderScanTray() {
         ${c.id === mejorId ? `<span class="sc-flag chip chip-menos">Mejor</span>` : ""}
         <img src="${c.thumb}" alt="">
         <div class="sc-precio tabular">${fmt(c.precio)}</div>
-        <div class="sc-meta tabular">${total ? `${total} ${unidadCorta}${norm ? ` · ${fmt(norm)}/${c.unidad === "unidad" ? "unid." : `100 ${c.unidad}`}` : ""}` : "Sin gramaje — toca para completar"}</div>
+        <div class="sc-meta tabular">${total ? `${total} ${unidadCorta}${norm ? ` · ${fmt(norm)}/${c.unidad === "unidad" ? "unid." : `100 ${c.unidad}`}` : ""}` : "Sin gramaje - toca para completar"}</div>
         ${c.nombre ? `<div class="sc-meta" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${esc(c.nombre)}</div>` : ""}
         ${c.agregadaComo
           ? `<span class="chip chip-menos" style="margin-top:6px">✓ En tu carrito</span>`
@@ -963,7 +963,7 @@ function renderScanTray() {
       <p class="caption tabular" style="color:var(--brand-deep); font-weight:650">${fmt(ver.mejor.normalizado)} ${ver.mejor.baseLabel}</p>
       ${ver.resto.map((r) => `<p class="caption tabular" style="margin-top:4px">${esc(r.etiqueta)}: +${(((r.normalizado / ver.mejor.normalizado) - 1) * 100).toFixed(1)}% más caro</p>`).join("")}
     </div>` : caps.length === 1
-      ? `<p class="caption" style="margin-top:10px">Captura otra etiqueta para comparar — o toca la tarjeta para agregarla directo.</p>`
+      ? `<p class="caption" style="margin-top:10px">Captura otra etiqueta para comparar - o toca la tarjeta para agregarla directo.</p>`
       : "";
 
   tray.innerHTML = caps.length
@@ -1130,7 +1130,7 @@ function terminarSesionEscaner() {
     goto("listas");
     toast("Lo escaneado quedó en tu carrito");
   } else {
-    toast(ver ? "Comparación guardada — nada agregado" : "Sesión reiniciada");
+    toast(ver ? "Comparación guardada - nada agregado" : "Sesión reiniciada");
     setScanStatus("Sesión nueva: captura la primera etiqueta.");
   }
 }
@@ -1201,7 +1201,7 @@ function renderListas() {
       <div class="totals-strip tabular">
         <div class="t-estimado"><div class="t-label">Estimado</div><div class="t-value">${fmt(t.totalEstimado)}</div></div>
         <div class="t-verificado"><div class="t-label">Verificado</div><div class="t-value">${fmt(t.totalVerificado)}</div></div>
-        <div class="t-facturado"><div class="t-label">Facturado</div><div class="t-value ${t.totalFacturado === null ? "pending" : ""}">${t.totalFacturado === null ? "—" : fmt(t.totalFacturado)}</div></div>
+        <div class="t-facturado"><div class="t-label">Facturado</div><div class="t-value ${t.totalFacturado === null ? "pending" : ""}">${t.totalFacturado === null ? "-" : fmt(t.totalFacturado)}</div></div>
       </div>
       <p class="micro" style="margin-top:10px">El precio verificado en góndola aún puede cambiar en caja; el facturado es el definitivo.</p>
     </div>
@@ -1659,7 +1659,7 @@ function openCerrarCompraSheet() {
 
   openSheet(`
     <h2 class="sheet-title">Cerrar compra</h2>
-    <p class="sheet-sub">Compara lo que pagaste contra lo verificado en tienda (${fmt(t.totalVerificado)}). Las diferencias suelen venir de promociones o ajustes en caja — no son un error tuyo.</p>
+    <p class="sheet-sub">Compara lo que pagaste contra lo verificado en tienda (${fmt(t.totalVerificado)}). Las diferencias suelen venir de promociones o ajustes en caja - no son un error tuyo.</p>
     <div class="seg" role="group" aria-label="Modo de cierre" style="margin-bottom:18px">
       <button id="ccModoTotal" aria-pressed="true">Total del recibo</button>
       <button id="ccModoItems" aria-pressed="false">Item por item</button>

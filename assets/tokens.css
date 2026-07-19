@@ -18,11 +18,11 @@
   --line: color-mix(in oklab, #1b1d1a 9%, transparent);
   --line-strong: color-mix(in oklab, #1b1d1a 18%, transparent);
 
-  --brand: #166a4a;
-  --brand-deep: #0d4c34;
+  --brand: #c41e1e;
+  --brand-deep: #8b1515;
   --on-brand: #ffffff;
-  --brand-soft: color-mix(in oklab, #166a4a 8%, #fffefb);
-  --brand-line: color-mix(in oklab, #166a4a 30%, transparent);
+  --brand-soft: color-mix(in oklab, #c41e1e 8%, #fffefb);
+  --brand-line: color-mix(in oklab, #c41e1e 30%, transparent);
 
   --info: #33618f;
   --info-soft: color-mix(in oklab, #33618f 10%, #fffefb);
@@ -55,11 +55,11 @@
     --line: color-mix(in oklab, #e7e9e3 10%, transparent);
     --line-strong: color-mix(in oklab, #e7e9e3 20%, transparent);
 
-    --brand: #7ed3a8;
-    --brand-deep: #a7e4c5;
-    --on-brand: #06331f;
-    --brand-soft: color-mix(in oklab, #7ed3a8 12%, #1a1d1a);
-    --brand-line: color-mix(in oklab, #7ed3a8 32%, transparent);
+    --brand: #ff6b6b;
+    --brand-deep: #ff9999;
+    --on-brand: #ffffff;
+    --brand-soft: color-mix(in oklab, #ff6b6b 12%, #1a1d1a);
+    --brand-line: color-mix(in oklab, #ff6b6b 32%, transparent);
 
     --info: #a9c8ea;
     --info-soft: color-mix(in oklab, #a9c8ea 14%, #1a1d1a);
@@ -77,9 +77,9 @@
   --ink: #1b1d1a; --ink-2: #565b53; --ink-3: #6c7166;
   --line: color-mix(in oklab, #1b1d1a 9%, transparent);
   --line-strong: color-mix(in oklab, #1b1d1a 18%, transparent);
-  --brand: #166a4a; --brand-deep: #0d4c34; --on-brand: #ffffff;
-  --brand-soft: color-mix(in oklab, #166a4a 8%, #fffefb);
-  --brand-line: color-mix(in oklab, #166a4a 30%, transparent);
+  --brand: #c41e1e; --brand-deep: #8b1515; --on-brand: #ffffff;
+  --brand-soft: color-mix(in oklab, #c41e1e 8%, #fffefb);
+  --brand-line: color-mix(in oklab, #c41e1e 30%, transparent);
   --info: #33618f; --info-soft: color-mix(in oklab, #33618f 10%, #fffefb);
   --danger: #a8352c; --danger-soft: color-mix(in oklab, #a8352c 9%, #fffefb);
   --shadow-1: 0 1px 2px rgba(18, 20, 18, .04), 0 6px 20px rgba(18, 20, 18, .05);
@@ -90,9 +90,9 @@
   --ink: #e7e9e3; --ink-2: #abb0a5; --ink-3: #7d8278;
   --line: color-mix(in oklab, #e7e9e3 10%, transparent);
   --line-strong: color-mix(in oklab, #e7e9e3 20%, transparent);
-  --brand: #7ed3a8; --brand-deep: #a7e4c5; --on-brand: #06331f;
-  --brand-soft: color-mix(in oklab, #7ed3a8 12%, #1a1d1a);
-  --brand-line: color-mix(in oklab, #7ed3a8 32%, transparent);
+  --brand: #ff6b6b; --brand-deep: #ff9999; --on-brand: #ffffff;
+  --brand-soft: color-mix(in oklab, #ff6b6b 12%, #1a1d1a);
+  --brand-line: color-mix(in oklab, #ff6b6b 32%, transparent);
   --info: #a9c8ea; --info-soft: color-mix(in oklab, #a9c8ea 14%, #1a1d1a);
   --danger: #f0a9a2; --danger-soft: color-mix(in oklab, #f0a9a2 12%, #1a1d1a);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, .25), 0 6px 20px rgba(0, 0, 0, .25);
