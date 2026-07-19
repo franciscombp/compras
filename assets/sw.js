@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v7-syntax-fixed";
+const CACHE_VERSION = "v8-ui-redesigned";
 const CACHE_NAME = `quanto-${CACHE_VERSION}`;
 const SCOPE = new URL('.', self.location).pathname;
 
