@@ -193,8 +193,8 @@ document.addEventListener("click", (e) => {
   // Comparador: ejemplo
   if (e.target.closest("#fillExample")) {
     state.compareRows = [
-      { nombre: "Leche 1L", precio: 2.50, cantidad: 1, unidad: "ml", unidades: 1000 },
-      { nombre: "Leche 500ml", precio: 1.50, cantidad: 2, unidad: "ml", unidades: 500 }
+      nuevaFilaComparacion({ nombre: "Atún lata suelta", precio: 1.20, cantidad: 80, unidad: "g", unidades: 1 }),
+      nuevaFilaComparacion({ nombre: "Atún pack ×6", precio: 6.00, cantidad: 80, unidad: "g", unidades: 6 }),
     ];
     renderCompareRows();
     return;
@@ -240,83 +240,54 @@ function renderHome() {
 // ---------------------------------------------------------------------------
 
 function renderCompareRows() {
-  const total = state.compareRows.length;
-  const step = Math.min(Math.max(state.compareStep, 0), Math.max(total - 1, 0));
-  state.compareStep = step;
+  const rows = state.compareRows;
 
-  if (!total) {
-    $("#compareRows").innerHTML = `<div class="compare-widget"><div class="hint-card">Agrega un producto para empezar.</div></div>`;
+  if (!rows.length) {
+    $("#compareRows").innerHTML = `<div class="hint-card">Agrega dos o más productos para ver cuál sale más barato de verdad.</div>`;
     renderResultadosComparacion();
     return;
   }
 
-  const row = state.compareRows[step];
-  const i = step;
-  const unidad = row.unidad || "g";
-  const presets = unidad === "unidad"
-    ? [1, 2, 6, 12]
-    : unidad === "ml"
-      ? [250, 500, 1000, 2000]
-      : [100, 250, 500, 1000];
-
-  $("#compareRows").innerHTML = `
-    <div class="compare-widget">
-      <div class="compare-progress-dots">
-        ${Array.from({length: total}, (_, idx) => `<button class="dot ${idx === step ? "active" : idx < step ? "done" : ""}" data-go-to="${idx}" aria-label="Ir al producto ${idx + 1}"></button>`).join("")}
+  $("#compareRows").innerHTML = rows.map((row, i) => {
+    const unidad = row.unidad || "g";
+    const letra = String.fromCharCode(65 + i);
+    const phCant = unidad === "unidad" ? "1" : unidad === "ml" ? "500" : "100";
+    return `
+    <div class="cmp-card" data-i="${i}">
+      <div class="cmp-card-top">
+        <span class="cmp-badge">${letra}</span>
+        <input class="cmp-name" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="Nombre del producto" autocomplete="off">
+        ${rows.length > 1 ? `<button class="cmp-remove" data-remove="${i}" aria-label="Quitar producto ${letra}">✕</button>` : ""}
       </div>
 
-      <div class="card compare-card" data-i="${i}">
-        <div class="compare-card-remove">
-          ${total > 1 ? `<button class="remove-row" data-remove="${i}" aria-label="Quitar producto ${String.fromCharCode(65 + i)}">✕</button>` : ""}
+      <div class="cmp-fields">
+        <div class="cmp-field cmp-field-price">
+          <span class="cmp-affix">$</span>
+          <input class="cmp-input tabular" id="cmp-precio-${i}" data-k="precio" type="number" inputmode="decimal" step="0.01" min="0" value="${row.precio ?? ""}" placeholder="0.00" autocomplete="off" aria-label="Precio del producto ${letra}">
         </div>
-
-        <div class="compare-focused-section">
-          <p class="compare-product-label">Producto ${String.fromCharCode(65 + i)}</p>
-
-          <div class="compare-hero-group">
-            <input class="input hero-input" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="¿Qué es?" autocomplete="off">
-          </div>
-
-          <div class="compare-price-group">
-            <span class="price-prefix">$</span>
-            <input class="input hero-input price-input" id="cmp-precio-${i}" data-k="precio" type="number" inputmode="decimal" step="0.01" min="0" value="${row.precio ?? ""}" placeholder="0.00" autocomplete="off">
-          </div>
+        <div class="cmp-field cmp-field-amount">
+          <input class="cmp-input tabular" id="cmp-cantidad-${i}" data-k="cantidad" type="number" inputmode="decimal" step="any" min="0" value="${row.cantidad ?? ""}" placeholder="${phCant}" autocomplete="off" aria-label="Contenido del producto ${letra}">
+          <select class="cmp-unit" data-k="unidad" aria-label="Unidad del producto ${letra}">
+            <option value="g" ${unidad === "g" ? "selected" : ""}>g</option>
+            <option value="ml" ${unidad === "ml" ? "selected" : ""}>ml</option>
+            <option value="unidad" ${unidad === "unidad" ? "selected" : ""}>u</option>
+          </select>
         </div>
-
-        <div class="compare-details-section">
-          <div class="details-header">
-            <div class="compare-unit-row" role="group" aria-label="Unidad">
-              ${["g", "ml", "unidad"].map((u) => `<button type="button" class="unit-pill ${u === unidad ? "is-active" : ""}" data-unit="${u}" data-i="${i}">${u === "unidad" ? "unid." : u}</button>`).join("")}
-            </div>
-            <div class="compare-summary" data-total-row="${i}"></div>
-          </div>
-
-          <div class="compare-quick-row">
-            ${presets.slice(0, 3).map((v) => `<button type="button" class="quick-pill" data-quick="${v}" data-i="${i}">${v}${unidad === "unidad" ? " ud" : unidad === "ml" ? " ml" : " g"}</button>`).join("")}
-          </div>
-
-          <div class="compare-quantity-fields">
-            <div class="qty-field">
-              <label for="cmp-cantidad-${i}" class="qty-label">Cantidad</label>
-              <input class="input tabular" id="cmp-cantidad-${i}" data-k="cantidad" type="number" inputmode="decimal" step="any" min="0" value="${row.cantidad ?? ""}" placeholder="${unidad === "unidad" ? "1" : unidad === "ml" ? "500" : "100"}" autocomplete="off">
-            </div>
-            <div class="qty-field">
-              <label for="cmp-unidades-${i}" class="qty-label">Envases</label>
-              <input class="input tabular" id="cmp-unidades-${i}" data-k="unidades" type="number" inputmode="numeric" step="1" min="1" value="${row.unidades ?? 1}" autocomplete="off">
-            </div>
-          </div>
+        <div class="cmp-field cmp-field-packs">
+          <span class="cmp-affix">×</span>
+          <input class="cmp-input tabular" id="cmp-unidades-${i}" data-k="unidades" type="number" inputmode="numeric" step="1" min="1" value="${row.unidades ?? 1}" autocomplete="off" aria-label="Número de envases del producto ${letra}">
         </div>
       </div>
 
-      <div class="compare-actions">
-        <button class="btn btn-quiet" type="button" data-step-nav="prev" ${step === 0 ? "disabled" : ""}>Anterior</button>
-        <button class="btn" type="button" data-step-nav="next">${step === total - 1 ? "Ver resultado" : "Siguiente"}</button>
-      </div>
-
-      <div class="compare-actions compare-actions-secondary">
-        <button class="btn btn-tonal" type="button" data-action="add-step">Agregar otro</button>
-      </div>
+      <div class="cmp-live" data-total-row="${i}"></div>
     </div>`;
+  }).join("");
+
+  // El ejemplo solo tiene sentido cuando aún no hay datos escritos.
+  const hayDatos = rows.some((r) => r.nombre.trim() || r.precio || r.cantidad);
+  const exampleRow = $("#fillExampleRow");
+  if (exampleRow) exampleRow.style.display = hayDatos ? "none" : "";
+
   renderResultadosComparacion();
 }
 
@@ -333,50 +304,19 @@ $("#compareRows").addEventListener("input", (e) => {
   renderResultadosComparacion();
 });
 
+// El <select> de unidad emite "change": re-render para actualizar el placeholder.
+$("#compareRows").addEventListener("change", (e) => {
+  const sel = e.target.closest("select[data-k='unidad']");
+  if (!sel) return;
+  const i = Number(e.target.closest("[data-i]").dataset.i);
+  state.compareRows[i].unidad = sel.value;
+  renderCompareRows();
+});
+
 $("#compareRows").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-remove]");
   if (btn) {
     state.compareRows.splice(Number(btn.dataset.remove), 1);
-    state.compareStep = Math.max(0, Math.min(state.compareStep, state.compareRows.length - 1));
-    renderCompareRows();
-    return;
-  }
-
-  const stepNav = e.target.closest("[data-step-nav]");
-  if (stepNav) {
-    if (stepNav.dataset.stepNav === "prev") {
-      state.compareStep = Math.max(0, state.compareStep - 1);
-    } else {
-      if (state.compareStep < state.compareRows.length - 1) {
-        state.compareStep += 1;
-      } else {
-        renderResultadosComparacion();
-      }
-    }
-    renderCompareRows();
-    return;
-  }
-
-  const addStep = e.target.closest("[data-action='add-step']");
-  if (addStep) {
-    state.compareRows.push(nuevaFilaComparacion());
-    state.compareStep = state.compareRows.length - 1;
-    renderCompareRows();
-    return;
-  }
-
-  const unitBtn = e.target.closest("[data-unit]");
-  if (unitBtn) {
-    const i = Number(unitBtn.dataset.i);
-    state.compareRows[i].unidad = unitBtn.dataset.unit;
-    renderCompareRows();
-    return;
-  }
-
-  const quickBtn = e.target.closest("[data-quick]");
-  if (quickBtn) {
-    const i = Number(quickBtn.dataset.i);
-    state.compareRows[i].cantidad = Number(quickBtn.dataset.quick);
     renderCompareRows();
   }
 });
@@ -397,13 +337,19 @@ function filaValida(r) {
 }
 
 function renderResultadosComparacion() {
-  // Actualiza los totales por fila sin re-renderizar los inputs.
+  // Actualiza la línea en vivo de cada tarjeta sin re-renderizar los inputs.
   state.compareRows.forEach((row, i) => {
     const slot = $(`[data-total-row="${i}"]`);
     if (!slot) return;
-    slot.textContent = filaValida(row)
-      ? `Total: ${row.cantidad * row.unidades} ${row.unidad === "unidad" ? "unid." : row.unidad}`
-      : "";
+    if (filaValida(row)) {
+      const n = normalizar(row, i);
+      const u = row.unidad === "unidad" ? "u" : row.unidad;
+      slot.textContent = `${fmt(n.normalizado)} ${n.baseLabel} · total ${n.totalContenido} ${u}`;
+      slot.classList.add("is-on");
+    } else {
+      slot.textContent = "Faltan datos";
+      slot.classList.remove("is-on");
+    }
   });
 
   const box = $("#compareResults");

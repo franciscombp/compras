@@ -97,12 +97,13 @@ if ('serviceWorker' in navigator) {
 
     <div id="compareRows"></div>
 
-    <div class="button-row" style="margin:4px 0 24px">
-      <button class="btn btn-quiet" id="addCompareRow">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg>
-        Agregar producto
-      </button>
-      <button class="btn btn-quiet" id="fillExample">Probar con un ejemplo</button>
+    <button class="btn-add-product" id="addCompareRow">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg>
+      Agregar producto
+    </button>
+
+    <div class="example-link-row" id="fillExampleRow">
+      <button class="btn-link" id="fillExample">Probar con un ejemplo</button>
     </div>
 
     <div id="compareResults" aria-live="polite"></div>

@@ -181,8 +181,8 @@ main[data-view="historial"] #view-historial { display: block; animation: screen-
   grid-template-columns: 44px 1fr;
   gap: 12px;
   align-items: start;
-  background: linear-gradient(to bottom, var(--bg), transparent);
-  padding: 12px 0 20px;
+  background: var(--bg);
+  padding: 12px 0 16px;
 }
 
 .block { margin-bottom: 28px; }
@@ -327,161 +327,87 @@ button { font: inherit; color: inherit; }
 
 /* ============================ Comparador ================================ */
 
-.compare-widget { display: grid; gap: 12px; }
+/* Tarjeta de producto: todos los productos visibles a la vez, compactos */
+.cmp-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius-m); padding: 14px;
+  margin-bottom: 12px; box-shadow: var(--shadow-1);
+}
 
-/* Progress indicator - smooth dots instead of numbered steps */
-.compare-progress-dots {
-  display: flex; gap: 6px; justify-content: center; padding: 16px 0 12px;
+.cmp-card-top {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
 }
-.compare-progress-dots .dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  border: 1px solid var(--line); background: var(--surface);
-  cursor: pointer; transition: all var(--dur) var(--ease);
-}
-.compare-progress-dots .dot.active {
-  background: var(--brand); border-color: var(--brand); transform: scale(1.3);
-  box-shadow: 0 0 8px color-mix(in oklab, var(--brand) 50%, transparent);
-}
-.compare-progress-dots .dot.done { background: var(--brand-soft); border-color: var(--brand-line); }
-
-.compare-progress {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-m);
-  padding: 12px 14px;
-  box-shadow: var(--shadow-1);
-}
-.compare-progress-meta {
-  display: flex; justify-content: space-between; align-items: center; gap: 10px;
-  margin-bottom: 8px;
-}
-.compare-step-pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: var(--radius-full);
+.cmp-badge {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
   background: var(--brand-soft); color: var(--brand-deep);
-  font-size: 12px; font-weight: 700;
+  font-size: 13px; font-weight: 750;
 }
-.compare-step-copy {
-  font-size: 12px; color: var(--ink-2);
+.cmp-name {
+  flex: 1; min-width: 0; min-height: 44px;
+  border: none; background: transparent; color: var(--ink);
+  font-size: 16px; font-weight: 650; padding: 0 2px;
 }
-.compare-progress-bar {
-  height: 8px; border-radius: var(--radius-full); background: var(--surface-2); overflow: hidden;
+.cmp-name::placeholder { color: var(--ink-3); font-weight: 500; }
+.cmp-name:focus { outline: none; }
+.cmp-remove {
+  flex: none; width: 30px; height: 30px; border-radius: 50%;
+  border: none; background: var(--surface-2); color: var(--ink-3);
+  font-size: 14px; cursor: pointer; transition: all var(--dur) var(--ease);
 }
-.compare-progress-fill {
-  height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand), color-mix(in oklab, var(--brand) 70%, white));
-  transition: width var(--dur) var(--ease);
-}
-.compare-card { position: relative; margin-bottom: 0; padding: 20px 16px; }
-.compare-card-remove {
-  position: absolute; top: 16px; right: 16px;
-}
-.compare-card .remove-row {
-  width: 32px; height: 32px; border-radius: var(--radius-full);
-  border: none; background: transparent; color: var(--ink-3);
-  font-size: 16px; cursor: pointer; transition: color var(--dur) var(--ease);
-}
-.compare-card .remove-row:hover { color: var(--danger); }
+.cmp-remove:hover { background: var(--danger-soft); color: var(--danger); }
 
-.compare-product-label {
-  font-size: 12px; font-weight: 700; letter-spacing: .06em;
-  color: var(--ink-3); text-transform: uppercase; margin: 0 0 20px;
+.cmp-fields {
+  display: grid; grid-template-columns: 1.1fr 1.4fr 0.9fr; gap: 8px;
 }
-
-/* Main focus section - large inputs for name & price */
-.compare-focused-section {
-  text-align: center; margin-bottom: 28px;
+.cmp-field {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--surface-2); border: 1px solid transparent;
+  border-radius: 12px; padding: 0 10px; min-height: 48px;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
 }
-
-.compare-hero-group {
-  margin-bottom: 24px;
+.cmp-field:focus-within { border-color: var(--brand-line); background: var(--surface); }
+.cmp-affix { color: var(--ink-3); font-size: 15px; font-weight: 600; flex: none; }
+.cmp-input {
+  width: 100%; min-width: 0; border: none; background: transparent;
+  color: var(--ink); font-size: 15px; font-weight: 650; padding: 0;
+  text-align: center;
 }
-
-.hero-input {
-  min-height: 64px; font-size: 22px; font-weight: 700;
-  padding: 12px 16px; letter-spacing: -.01em;
+.cmp-input:focus { outline: none; }
+.cmp-field-price .cmp-input { text-align: left; }
+.cmp-unit {
+  flex: none; border: none; background: transparent; color: var(--ink-2);
+  font-size: 14px; font-weight: 650; cursor: pointer; padding: 0 2px;
 }
+.cmp-unit:focus { outline: none; }
+.cmp-field-packs { padding: 0 8px; }
 
-.compare-price-group {
+.cmp-live {
+  margin-top: 10px; font-size: 12.5px; font-weight: 600;
+  color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.cmp-live.is-on { color: var(--brand-deep); }
+
+.btn-add-product {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  margin-bottom: 0;
+  width: 100%; min-height: 52px; margin: 4px 0 12px;
+  border: 1.5px dashed var(--line-strong); border-radius: var(--radius-m);
+  background: transparent; color: var(--ink-2);
+  font: inherit; font-size: 15px; font-weight: 650; cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+.btn-add-product svg { width: 20px; height: 20px; }
+.btn-add-product:hover {
+  border-color: var(--brand-line); color: var(--brand-deep); background: var(--brand-soft);
 }
 
-.price-prefix {
-  font-size: 20px; font-weight: 600; color: var(--ink-2);
+.example-link-row { text-align: center; margin-bottom: 24px; }
+.btn-link {
+  border: none; background: none; cursor: pointer;
+  color: var(--ink-3); font: inherit; font-size: 13px; font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px;
 }
-
-.price-input {
-  min-height: 56px; font-size: 28px; font-weight: 750;
-  width: 140px; text-align: center; letter-spacing: -.01em;
-}
-
-/* Details section - compact inputs for optional fields */
-.compare-details-section {
-  background: var(--surface-2); border-radius: 16px; padding: 16px;
-}
-
-.details-header {
-  display: flex; justify-content: space-between; align-items: center; gap: 12px;
-  margin-bottom: 12px;
-}
-
-.compare-unit-row {
-  flex: 0;
-}
-
-.compare-summary {
-  flex: 1; min-height: 40px; display: flex; align-items: center;
-  padding: 8px 12px; border-radius: 12px; background: var(--surface);
-  color: var(--ink-2); font-size: 12px; font-weight: 600;
-  text-align: right;
-}
-
-.compare-quick-row {
-  margin-bottom: 12px;
-}
-
-.compare-quantity-fields {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-}
-
-.qty-field {
-  display: flex; flex-direction: column; gap: 6px;
-}
-
-.qty-label {
-  font-size: 11px; font-weight: 650; color: var(--ink-3);
-  letter-spacing: .04em; text-transform: uppercase;
-}
-
-.qty-field .input {
-  min-height: 44px; font-size: 14px; padding: 8px 10px;
-}
-
-.hero-field { margin-bottom: 12px; }
-.hero-label {
-  display: block; font-size: 13px; font-weight: 650; color: var(--ink-2); margin-bottom: 6px;
-}
-.compare-unit-row, .compare-quick-row {
-  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
-}
-.unit-pill, .quick-pill {
-  border: 1px solid var(--line); border-radius: var(--radius-full);
-  background: var(--surface); color: var(--ink-2);
-  padding: 8px 12px; font-size: 13px; font-weight: 650; cursor: pointer;
-}
-.unit-pill.is-active, .quick-pill:hover {
-  border-color: var(--brand-line); background: var(--brand-soft); color: var(--brand-deep);
-}
-.compare-bottom { align-items: end; }
-.compare-summary {
-  min-height: 48px; display: flex; align-items: center;
-  padding: 10px 12px; border-radius: 14px; background: var(--surface-2);
-  color: var(--ink-2); font-size: 13px; font-weight: 600;
-}
-.compare-actions {
-  display: flex; gap: 10px; justify-content: space-between;
-}
-.compare-actions-secondary { justify-content: center; }
+.btn-link:hover { color: var(--brand-deep); }
 
 .result-winner {
   background: linear-gradient(145deg, var(--brand-soft), color-mix(in oklab, var(--brand) 3%, var(--surface)));
