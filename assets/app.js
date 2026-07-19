@@ -168,9 +168,37 @@ function renderView(view) {
   if (view === "historial") renderHistorial();
 }
 
+// Event delegation - manejar todos los clicks
 document.addEventListener("click", (e) => {
+  // Navegación por data-goto
   const nav = e.target.closest("[data-goto]");
-  if (nav) goto(nav.dataset.goto);
+  if (nav) {
+    goto(nav.dataset.goto);
+    return;
+  }
+
+  // Home: nueva lista
+  if (e.target.closest("#homeNuevaLista")) {
+    openNuevaListaSheet();
+    return;
+  }
+
+  // Comparador: agregar producto
+  if (e.target.closest("#addCompareRow")) {
+    state.compareRows.push(nuevaFilaComparacion());
+    renderCompareRows();
+    return;
+  }
+
+  // Comparador: ejemplo
+  if (e.target.closest("#fillExample")) {
+    state.compareRows = [
+      { nombre: "Leche 1L", precio: 2.50, cantidad: 1, unidad: "ml", unidades: 1000 },
+      { nombre: "Leche 500ml", precio: 1.50, cantidad: 2, unidad: "ml", unidades: 500 }
+    ];
+    renderCompareRows();
+    return;
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -205,7 +233,7 @@ function renderHome() {
     </button>` : "";
 }
 
-$("#homeNuevaLista").addEventListener("click", () => openNuevaListaSheet());
+// Removido: ahora usa delegación de eventos arriba
 
 // ---------------------------------------------------------------------------
 // Comparador manual
@@ -361,20 +389,6 @@ $("#compareRows").addEventListener("click", (e) => {
   }
 });
 
-$("#addCompareRow").addEventListener("click", () => {
-  state.compareRows.push(nuevaFilaComparacion());
-  state.compareStep = state.compareRows.length - 1;
-  renderCompareRows();
-});
-
-$("#fillExample").addEventListener("click", () => {
-  state.compareRows = [
-    nuevaFilaComparacion({ nombre: "6 atunes individuales", precio: 8.10, cantidad: 80, unidad: "g", unidades: 6 }),
-    nuevaFilaComparacion({ nombre: "Pack de 6 atunes", precio: 7.20, cantidad: 70, unidad: "g", unidades: 6 }),
-  ];
-  state.compareStep = 0;
-  renderCompareRows();
-});
 
 function normalizar(row, idx) {
   const totalContenido = row.cantidad * row.unidades;
