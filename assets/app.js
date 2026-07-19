@@ -21,7 +21,8 @@ const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const state = {
   view: "home",
   scanReturnTo: "home",
-  compareRows: [nuevaFilaComparacion(), nuevaFilaComparacion()],
+  compareRows: [nuevaFilaComparacion()],
+  compareStep: 0,
 };
 
 function nuevaFilaComparacion(datos = {}) {
@@ -211,40 +212,91 @@ $("#homeNuevaLista").addEventListener("click", () => openNuevaListaSheet());
 // ---------------------------------------------------------------------------
 
 function renderCompareRows() {
-  $("#compareRows").innerHTML = state.compareRows.map((row, i) => `
-    <div class="card compare-card" data-i="${i}">
-      <p class="compare-tag">Producto ${String.fromCharCode(65 + i)}</p>
-      ${state.compareRows.length > 2 ? `<button class="remove-row" data-remove="${i}" aria-label="Quitar producto ${String.fromCharCode(65 + i)}">✕</button>` : ""}
-      <div class="field">
-        <label for="cmp-nombre-${i}">Nombre (opcional)</label>
-        <input class="input" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="Ej. Atún individual">
+  const total = state.compareRows.length;
+  const step = Math.min(Math.max(state.compareStep, 0), Math.max(total - 1, 0));
+  state.compareStep = step;
+
+  if (!total) {
+    $("#compareRows").innerHTML = `<div class="compare-widget"><div class="hint-card">Agrega un producto para empezar.</div></div>`;
+    renderResultadosComparacion();
+    return;
+  }
+
+  const row = state.compareRows[step];
+  const i = step;
+  const unidad = row.unidad || "g";
+  const presets = unidad === "unidad"
+    ? [1, 2, 6, 12]
+    : unidad === "ml"
+      ? [250, 500, 1000, 2000]
+      : [100, 250, 500, 1000];
+
+  $("#compareRows").innerHTML = `
+    <div class="compare-widget">
+      <div class="compare-progress">
+        <div class="compare-progress-meta">
+          <span class="compare-step-pill">Paso ${step + 1} de ${total}</span>
+          <span class="compare-step-copy">${total > 1 ? "Completa un producto a la vez y al terminar te muestro el ganador." : "Agrega otro producto para comparar."}</span>
+        </div>
+        <div class="compare-progress-bar">
+          <div class="compare-progress-fill" style="width:${((step + 1) / Math.max(total, 1)) * 100}%"></div>
+        </div>
       </div>
-      <div class="field-grid-3">
-        <div class="field">
-          <label for="cmp-precio-${i}">Precio total</label>
-          <input class="input tabular" id="cmp-precio-${i}" data-k="precio" type="number" inputmode="decimal" step="0.01" min="0" value="${row.precio ?? ""}" placeholder="0.00">
+
+      <div class="card compare-card" data-i="${i}">
+        <div class="compare-card-head">
+          <div>
+            <p class="compare-tag">Producto ${String.fromCharCode(65 + i)}</p>
+            <p class="compare-lede">Escribe lo básico y sigue con el siguiente.</p>
+          </div>
+          ${total > 1 ? `<button class="remove-row" data-remove="${i}" aria-label="Quitar producto ${String.fromCharCode(65 + i)}">✕</button>` : ""}
         </div>
-        <div class="field">
-          <label for="cmp-cantidad-${i}">Por envase</label>
-          <input class="input tabular" id="cmp-cantidad-${i}" data-k="cantidad" type="number" inputmode="decimal" step="any" min="0" value="${row.cantidad ?? ""}" placeholder="80">
+
+        <label class="field hero-field">
+          <span class="hero-label">¿Qué producto es?</span>
+          <input class="input hero-input" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="Ej. Atún en lata">
+        </label>
+
+        <div class="compare-unit-row" role="group" aria-label="Tipo de medida">
+          ${["g", "ml", "unidad"].map((u) => `<button type="button" class="unit-pill ${u === unidad ? "is-active" : ""}" data-unit="${u}" data-i="${i}">${u === "unidad" ? "unid." : u}</button>`).join("")}
         </div>
-        <div class="field">
-          <label for="cmp-unidad-${i}">Unidad</label>
-          <select class="input" id="cmp-unidad-${i}" data-k="unidad">
-            <option value="g" ${row.unidad === "g" ? "selected" : ""}>g</option>
-            <option value="ml" ${row.unidad === "ml" ? "selected" : ""}>ml</option>
-            <option value="unidad" ${row.unidad === "unidad" ? "selected" : ""}>unid.</option>
-          </select>
+
+        <div class="compare-quick-row">
+          ${presets.slice(0, 3).map((v) => `<button type="button" class="quick-pill" data-quick="${v}" data-i="${i}">${v}${unidad === "unidad" ? " ud" : unidad === "ml" ? " ml" : " g"}</button>`).join("")}
+        </div>
+
+        <div class="field-grid-2">
+          <div class="field">
+            <label for="cmp-precio-${i}">Precio total</label>
+            <input class="input tabular" id="cmp-precio-${i}" data-k="precio" type="number" inputmode="decimal" step="0.01" min="0" value="${row.precio ?? ""}" placeholder="0.00">
+          </div>
+          <div class="field">
+            <label for="cmp-cantidad-${i}">Contenido</label>
+            <input class="input tabular" id="cmp-cantidad-${i}" data-k="cantidad" type="number" inputmode="decimal" step="any" min="0" value="${row.cantidad ?? ""}" placeholder="${unidad === "unidad" ? "1" : unidad === "ml" ? "500" : "100"}">
+          </div>
+        </div>
+
+        <div class="field-grid-2 compare-bottom">
+          <div class="field">
+            <label for="cmp-unidades-${i}">Nº de envases</label>
+            <input class="input tabular" id="cmp-unidades-${i}" data-k="unidades" type="number" inputmode="numeric" step="1" min="1" value="${row.unidades ?? 1}">
+          </div>
+          <div class="field">
+            <label>Resumen</label>
+            <div class="compare-summary" data-total-row="${i}"></div>
+          </div>
         </div>
       </div>
-      <div class="field-grid" style="align-items:end">
-        <div class="field" style="margin-bottom:0">
-          <label for="cmp-unidades-${i}">Nº de envases</label>
-          <input class="input tabular" id="cmp-unidades-${i}" data-k="unidades" type="number" inputmode="numeric" step="1" min="1" value="${row.unidades ?? 1}">
-        </div>
-        <p class="micro tabular" data-total-row="${i}" style="padding-bottom:14px"></p>
+
+      <div class="compare-actions">
+        <button class="btn btn-quiet" type="button" data-step-nav="prev" ${step === 0 ? "disabled" : ""}>Anterior</button>
+        <button class="btn" type="button" data-step-nav="next">${step === total - 1 ? "Ver resultado" : "Siguiente"}</button>
       </div>
-    </div>`).join("");
+
+      <div class="compare-actions compare-actions-secondary">
+        <button class="btn btn-tonal" type="button" data-action="add-step">Agregar otro producto</button>
+      </div>
+    </div>`;
   renderResultadosComparacion();
 }
 
@@ -263,13 +315,55 @@ $("#compareRows").addEventListener("input", (e) => {
 
 $("#compareRows").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-remove]");
-  if (!btn) return;
-  state.compareRows.splice(Number(btn.dataset.remove), 1);
-  renderCompareRows();
+  if (btn) {
+    state.compareRows.splice(Number(btn.dataset.remove), 1);
+    state.compareStep = Math.max(0, Math.min(state.compareStep, state.compareRows.length - 1));
+    renderCompareRows();
+    return;
+  }
+
+  const stepNav = e.target.closest("[data-step-nav]");
+  if (stepNav) {
+    if (stepNav.dataset.stepNav === "prev") {
+      state.compareStep = Math.max(0, state.compareStep - 1);
+    } else {
+      if (state.compareStep < state.compareRows.length - 1) {
+        state.compareStep += 1;
+      } else {
+        renderResultadosComparacion();
+      }
+    }
+    renderCompareRows();
+    return;
+  }
+
+  const addStep = e.target.closest("[data-action='add-step']");
+  if (addStep) {
+    state.compareRows.push(nuevaFilaComparacion());
+    state.compareStep = state.compareRows.length - 1;
+    renderCompareRows();
+    return;
+  }
+
+  const unitBtn = e.target.closest("[data-unit]");
+  if (unitBtn) {
+    const i = Number(unitBtn.dataset.i);
+    state.compareRows[i].unidad = unitBtn.dataset.unit;
+    renderCompareRows();
+    return;
+  }
+
+  const quickBtn = e.target.closest("[data-quick]");
+  if (quickBtn) {
+    const i = Number(quickBtn.dataset.i);
+    state.compareRows[i].cantidad = Number(quickBtn.dataset.quick);
+    renderCompareRows();
+  }
 });
 
 $("#addCompareRow").addEventListener("click", () => {
   state.compareRows.push(nuevaFilaComparacion());
+  state.compareStep = state.compareRows.length - 1;
   renderCompareRows();
 });
 
@@ -278,6 +372,7 @@ $("#fillExample").addEventListener("click", () => {
     nuevaFilaComparacion({ nombre: "6 atunes individuales", precio: 8.10, cantidad: 80, unidad: "g", unidades: 6 }),
     nuevaFilaComparacion({ nombre: "Pack de 6 atunes", precio: 7.20, cantidad: 70, unidad: "g", unidades: 6 }),
   ];
+  state.compareStep = 0;
   renderCompareRows();
 });
 
