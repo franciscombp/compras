@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v3-smart";
+const CACHE_VERSION = "v4-limpio";
 const CACHE_NAME = `quanto-${CACHE_VERSION}`;
 const SCOPE = new URL('.', self.location).pathname;
 
