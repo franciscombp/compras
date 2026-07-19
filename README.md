@@ -10,26 +10,13 @@ Compara el precio real de productos por 100 g/ml y lleva tus listas de compra co
 - **Historial**: Cierra compras, ve cuánto pagaste de verdad vs lo que esperabas.
 - **Offline**: PWA con cache; funciona sin conexión una vez instalada.
 
-## Despliegue en GitHub Pages
+## 🚀 En Producción
 
-### Opción 1: Publicar desde la rama `main`
+**Live**: https://franciscombp.github.io/quanto/
 
-1. En el repositorio de GitHub, ve a **Settings** → **Pages**
-2. Selecciona **Source**: `Deploy from a branch`
-3. Elige **Branch**: `main` (o donde esté el código)
-4. La URL será: `https://tu-usuario.github.io/quanto/`
+Actualiza automáticamente en GitHub Pages cada vez que hagas `git push origin main`.
 
-### Opción 2: Publicar desde rama `gh-pages`
-
-```bash
-git checkout --orphan gh-pages
-git rm -rf .
-git add -A
-git commit -m "Deploy to GitHub Pages"
-git push -u origin gh-pages
-```
-
-Luego ve a **Settings** → **Pages** y selecciona `gh-pages`.
+Ver [`DEPLOY.md`](./DEPLOY.md) para configuración completa y flujo de desarrollo.
 
 ## Instalación como PWA
 
