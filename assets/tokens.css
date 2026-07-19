@@ -129,8 +129,13 @@ svg[hidden] { display: none; }
 /* ============================ Tipografía ================================ */
 
 .kicker {
+  display: inline-flex; align-items: center; gap: 7px;
   font-size: 12px; font-weight: 650; letter-spacing: .08em;
   text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px;
+}
+.kicker::before {
+  content: ""; width: 8px; height: 8px; border-radius: 3px;
+  background: var(--brand); flex: none;
 }
 .display {
   font-size: 30px; font-weight: 750; letter-spacing: -.02em;
@@ -286,6 +291,10 @@ button { font: inherit; color: inherit; }
   padding: 3px 10px; border-radius: var(--radius-full);
   font-size: 12px; font-weight: 650;
 }
+.badge::before {
+  content: ""; width: 6px; height: 6px; border-radius: var(--radius-full);
+  background: currentColor; opacity: .7;
+}
 .badge-estimado { background: var(--surface-2); color: var(--ink-2); }
 .badge-verificado { background: var(--info-soft); color: var(--info); border: 1px solid color-mix(in oklab, var(--info) 25%, transparent); }
 .badge-facturado { background: var(--brand-soft); color: var(--brand-deep); border: 1px solid var(--brand-line); }
@@ -311,7 +320,7 @@ button { font: inherit; color: inherit; }
 }
 
 .result-winner {
-  background: var(--brand-soft);
+  background: linear-gradient(145deg, var(--brand-soft), color-mix(in oklab, var(--brand) 3%, var(--surface)));
   border: 1.5px solid var(--brand-line);
   border-radius: var(--radius-m);
   padding: 20px;
@@ -333,11 +342,24 @@ button { font: inherit; color: inherit; }
 .winner-price small { font-size: 14px; font-weight: 600; color: var(--ink-2); letter-spacing: 0; }
 
 .result-row {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
   padding: 14px 0; border-bottom: 1px solid var(--line);
 }
 .result-row:last-child { border-bottom: none; }
-.result-delta { font-size: 13px; font-weight: 650; color: var(--danger); white-space: nowrap; }
+.result-delta { font-size: 13px; font-weight: 650; color: var(--danger); white-space: nowrap; margin-top: 2px; }
+.result-delta.is-best { color: var(--brand-deep); }
+
+/* Barra de costo relativo: cuanto más larga, más caro sale por 100 g/ml */
+.result-bar-track {
+  height: 6px; margin-top: 8px; border-radius: var(--radius-full);
+  background: var(--surface-2); overflow: hidden;
+}
+.result-bar {
+  height: 100%; border-radius: var(--radius-full);
+  background: var(--danger); opacity: .55;
+  transition: width 400ms var(--ease);
+}
+.result-bar.is-best { background: var(--brand); opacity: 1; }
 
 .trick-note {
   display: flex; gap: 10px; align-items: flex-start;

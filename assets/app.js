@@ -340,14 +340,18 @@ function renderResultadosComparacion() {
       </div>
     </div>
     <div class="card" style="margin-top:12px">
-      ${resto.map((r) => `
+      ${norm.map((r) => {
+        const esMejor = r === mejor;
+        return `
         <div class="result-row">
-          <div style="min-width:0">
+          <div style="min-width:0; flex:1">
             <div style="font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${esc(r.etiqueta)}</div>
             <div class="micro tabular">${fmt(r.normalizado)} ${r.baseLabel} · ${r.totalContenido} ${r.unidad === "unidad" ? "unid." : r.unidad}</div>
+            <div class="result-bar-track"><div class="result-bar ${esMejor ? "is-best" : ""}" style="width:${((r.normalizado / norm[norm.length - 1].normalizado) * 100).toFixed(1)}%"></div></div>
           </div>
-          <span class="result-delta tabular">+${(((r.normalizado / mejor.normalizado) - 1) * 100).toFixed(1)}%</span>
-        </div>`).join("")}
+          <span class="result-delta tabular ${esMejor ? "is-best" : ""}">${esMejor ? "Mejor" : `+${(((r.normalizado / mejor.normalizado) - 1) * 100).toFixed(1)}%`}</span>
+        </div>`;
+      }).join("")}
       ${trucos.map((t) => `<div class="trick-note">${icon("alert")}<span>${t}</span></div>`).join("")}
     </div>`;
 
@@ -454,31 +458,112 @@ async function leerEtiqueta(canvas) {
   return { texto: data.text || "", confianza: data.confidence ?? 0 };
 }
 
-/** Extrae precio, contenido y candidato a nombre del texto OCR. */
-function parseEtiqueta(texto) {
-  const t = texto.replace(/\s+/g, " ");
-  let precio = null;
-  const conSimbolo = t.match(/\$\s*(\d{1,4}(?:[.,]\d{1,2})?)/);
-  const conDecimales = t.match(/(?:^|[^\d.,])(\d{1,4}[.,]\d{2})(?![\d])/);
-  if (conSimbolo) precio = Number(conSimbolo[1].replace(",", "."));
-  else if (conDecimales) precio = Number(conDecimales[1].replace(",", "."));
+/**
+ * Extrae precio, contenido, nº de envases y candidato a nombre del texto OCR.
+ * Entiende los formatos habituales de góndola:
+ *  - precio con o sin símbolo, cerca de palabras clave (PVP, precio, ahora, oferta)
+ *  - "antes / ahora": se queda con el precio de oferta, no con el tachado
+ *  - packs: "6 x 80 g", "pack 6 unidades", "3 un x 170g"
+ *  - medidas en g, kg, mg, ml, cc, cl, l, lb, oz (convierte a g / ml)
+ *  - precio unitario ya impreso ("$3.99/kg", "1.25 por 100 g") — si la etiqueta
+ *    no trae gramaje, el contenido se deduce de ahí
+ */
+function parseNumero(s) {
+  return Number(String(s).replace(",", "."));
+}
 
+const UNIDADES_MEDIDA = {
+  kg: ["g", 1000], kilo: ["g", 1000], kilos: ["g", 1000], kgs: ["g", 1000],
+  g: ["g", 1], gr: ["g", 1], grs: ["g", 1], gramo: ["g", 1], gramos: ["g", 1],
+  mg: ["g", 0.001],
+  lb: ["g", 453.6], lbs: ["g", 453.6], libra: ["g", 453.6], libras: ["g", 453.6],
+  oz: ["g", 28.35],
+  ml: ["ml", 1], cc: ["ml", 1], cl: ["ml", 10],
+  l: ["ml", 1000], lt: ["ml", 1000], lts: ["ml", 1000], litro: ["ml", 1000], litros: ["ml", 1000],
+};
+const RE_UNIDAD = "kgs?|kilos?|grs?|gramos?|mg|lbs?|libras?|oz|ml|cc|cl|lts?|litros?|g|l";
+
+function parseEtiqueta(texto) {
+  let t = texto.replace(/\s+/g, " ");
+
+  // --- Precio unitario impreso ("$3.99/kg", "0.85 por 100 g", "1.10 c/u") --
+  // Se detecta primero y se retira del texto: su número no es el precio total
+  // ni su medida ("100 g") es el contenido del envase.
+  let unitarioImpreso = null; // { base, porCien } o { base: "unidad", porUno }
+  const unit = t.match(new RegExp(`(?:\\$|usd)?\\s*(\\d{1,4}[.,]\\d{1,2})\\s*(?:\\/|por\\s+)(?:cada\\s+)?(100\\s*)?(${RE_UNIDAD})\\b`, "i"));
+  if (unit) {
+    const conv = UNIDADES_MEDIDA[unit[3].toLowerCase()];
+    if (conv) {
+      const cantidadRef = (unit[2] ? 100 : 1) * conv[1]; // en g o ml
+      unitarioImpreso = { base: conv[0], porCien: (parseNumero(unit[1]) / cantidadRef) * 100 };
+      t = t.replace(unit[0], " ");
+    }
+  }
+  const cu = t.match(/(?:\$\s*)?(\d{1,4}[.,]\d{2})\s*c\s*\/?\s*u\b/i);
+  if (cu) { unitarioImpreso = { base: "unidad", porUno: parseNumero(cu[1]) }; }
+
+  // --- Precio: junta candidatos y elige el más creíble ---------------------
+  const candidatos = [];
+  for (const m of t.matchAll(/(\$|usd\s*)?\s*(\d{1,4}[.,]\d{2})(?![\d])/gi)) {
+    const antesDe = t.slice(Math.max(0, m.index - 18), m.index).toLowerCase();
+    let peso = 0;
+    if (m[1]) peso += 2;                                             // trae símbolo
+    if (/pvp|precio|ahora|oferta|lleva|paga/.test(antesDe)) peso += 3; // palabra clave
+    if (/antes|normal|regular|tachado/.test(antesDe)) peso -= 4;      // precio viejo
+    if (/\/|por\s*$/.test(antesDe)) peso -= 2;                        // es unitario, no total
+    candidatos.push({ valor: parseNumero(m[2]), peso, index: m.index });
+  }
+  // Entero con símbolo ("$3") como último recurso
+  const entero = t.match(/\$\s*(\d{1,4})(?![\d.,])/);
+  if (entero && !candidatos.length) candidatos.push({ valor: Number(entero[1]), peso: 0, index: entero.index });
+  candidatos.sort((a, b) => b.peso - a.peso || a.index - b.index);
+  let precio = candidatos[0]?.valor ?? null;
+  if (precio !== null && (precio <= 0 || precio > 5000)) precio = null;
+
+  // --- Pack: "6 x 80 g", "pack de 6", "x6", "6 unid" -----------------------
+  let unidades = 1;
+  const packMedida = t.match(new RegExp(`(\\d{1,2})\\s*(?:x|×)\\s*(\\d+(?:[.,]\\d+)?)\\s*(${RE_UNIDAD})\\b`, "i"));
+  const packSolo = t.match(/(?:pack\s*(?:de\s*)?|x\s?)(\d{1,2})\s*(?:un(?:id(?:ades)?)?\.?\b|$)/i)
+    || t.match(/(\d{1,2})\s*un(?:id(?:ades)?)?\.?\b/i);
+  if (packMedida) unidades = Number(packMedida[1]);
+  else if (packSolo) unidades = Number(packSolo[1]);
+  if (unidades < 1 || unidades > 48) unidades = 1;
+
+  // --- Contenido por envase ------------------------------------------------
   let contenido = null, unidad = null;
-  const medida = t.match(/(\d+(?:[.,]\d+)?)\s*(kg|kilos?|gr|gramos?|g|ml|cc|litros?|lt|l)\b/i);
+  const medida = packMedida
+    ? { valor: packMedida[2], u: packMedida[3] }
+    : (() => {
+        const m = t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(${RE_UNIDAD})\\b`, "i"));
+        return m ? { valor: m[1], u: m[2] } : null;
+      })();
   if (medida) {
-    let valor = Number(medida[1].replace(",", "."));
-    const u = medida[2].toLowerCase();
-    if (u === "kg" || u.startsWith("kilo")) { valor *= 1000; unidad = "g"; }
-    else if (u === "g" || u === "gr" || u.startsWith("gram")) unidad = "g";
-    else if (u === "ml" || u === "cc") unidad = "ml";
-    else { valor *= 1000; unidad = "ml"; }
-    contenido = Math.round(valor);
+    const conv = UNIDADES_MEDIDA[medida.u.toLowerCase()];
+    if (conv) {
+      unidad = conv[0];
+      contenido = Math.round(parseNumero(medida.valor) * conv[1]);
+      if (contenido <= 0) { contenido = null; unidad = null; }
+    }
   }
 
-  const nombre = texto.split("\n").map((l) => l.trim())
-    .find((l) => l.length >= 4 && /[a-záéíóúñ]{4,}/i.test(l) && !/\d/.test(l)) || "";
+  // Sin gramaje pero con precio total y unitario impreso => deducir contenido
+  if (!contenido && precio && unitarioImpreso?.porCien) {
+    contenido = Math.round((precio / unitarioImpreso.porCien) * 100 / unidades);
+    unidad = unitarioImpreso.base;
+  }
 
-  return { precio, contenido, unidad, nombre };
+  // --- Nombre: la línea "más de producto" del texto ------------------------
+  const RUIDO = /pvp|precio|oferta|ahora|antes|lleva|gratis|paga|ahorr|promo|desc|unid|total|caja|cod|sku/i;
+  const nombre = texto.split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length >= 4 && /[a-záéíóúñ]{4,}/i.test(l) && !RUIDO.test(l))
+    .sort((a, b) => {
+      // prefiere líneas sin dígitos; entre iguales, la más larga
+      const da = /\d/.test(a) ? 1 : 0, db = /\d/.test(b) ? 1 : 0;
+      return da - db || b.length - a.length;
+    })[0] || "";
+
+  return { precio, contenido, unidad, unidades, nombre };
 }
 
 const PROBLEMAS_CAMARA = {
@@ -643,7 +728,7 @@ function agregarCaptura(datos, canvas) {
     precio: datos.precio,
     contenido: datos.contenido,
     unidad: datos.unidad || "g",
-    unidades: 1,
+    unidades: datos.unidades || 1,
     thumb: miniatura(canvas),
     agregadaComo: null, // id del ItemLista si ya se agregó / marcó
   };
