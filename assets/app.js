@@ -1317,47 +1317,51 @@ function openAddItemSheet(prefill = {}) {
   const renderStep = () => {
     const paso = wizard.step;
     const d = wizard.datos;
-    const puedeAvanzar = paso === 0 ? d.nombre.trim().length >= 2
-      : paso === 1 ? d.precio !== null && d.precio > 0
+    const valid = paso === 0 ? d.nombre.trim().length >= 2
+      : paso === 1 ? d.precio && d.precio > 0
         : paso === 2 ? d.cantidad > 0
           : paso === 3 ? !d.contenido || d.contenido > 0
             : true;
 
-    // Actualizar progreso
-    $$(".wizard-progress .step", sheetContent).forEach((el, i) => {
+    // Update progress
+    const steps = sheetContent.querySelectorAll(".wizard-progress .step");
+    steps.forEach((el, i) => {
       el.classList.toggle("active", i === paso);
       el.classList.toggle("done", i < paso);
     });
 
-    // Mostrar/ocultar pasos
-    $$(".wizard-screen", sheetContent).forEach((el, i) => {
+    // Show/hide screens
+    const screens = sheetContent.querySelectorAll(".wizard-screen");
+    screens.forEach((el, i) => {
       el.classList.toggle("active", i === paso);
     });
 
-    // Botones de navegación
-    const btnSig = $("#wizardSiguiente", sheetContent);
-    const btnAnt = $("#wizardAnterior", sheetContent);
-    if (btnSig) btnSig.disabled = !puedeAvanzar;
-    if (btnAnt) btnAnt.style.display = paso === 0 ? "none" : "";
+    // Update buttons
+    const btnNext = sheetContent.querySelector("#wizardSiguiente");
+    const btnPrev = sheetContent.querySelector("#wizardAnterior");
+    if (btnNext) btnNext.disabled = !valid;
+    if (btnPrev) btnPrev.style.display = paso === 0 ? "none" : "block";
   };
 
   const avanzar = () => {
-    if (wizard.step < 4) wizard.step++;
-    renderStep();
-    // Auto-focus al input hero del paso siguiente
-    setTimeout(() => {
-      const input = $(".input-hero:not(:disabled)", sheetContent);
-      if (input) input.focus();
-    }, 100);
+    if (wizard.step < 4) {
+      wizard.step++;
+      renderStep();
+      setTimeout(() => {
+        const input = sheetContent.querySelector(".input-hero");
+        if (input) input.focus();
+      }, 50);
+    }
   };
 
   const retroceder = () => {
-    if (wizard.step > 0) wizard.step--;
-    renderStep();
+    if (wizard.step > 0) {
+      wizard.step--;
+      renderStep();
+    }
   };
 
   const guardar = () => {
-    flyToNav();
     const contenido = Number(wizard.datos.contenido || 0);
     guardarProducto({
       nombre: wizard.datos.nombre.trim() || "Producto",
@@ -1505,44 +1509,34 @@ function openAddItemSheet(prefill = {}) {
       </div>
     </div>`);
 
-  // Setup listeners
+  // Setup listeners - usar querySelector para evitar problemas
   configurarDictado();
 
-  $("#wzNombre", sheetContent)?.addEventListener("input", (e) => {
-    wizard.datos.nombre = e.target.value;
-  });
-  $("#wzNombre", sheetContent)?.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") avanzar();
-  });
+  const inNombre = sheetContent.querySelector("#wzNombre");
+  const inPrecio = sheetContent.querySelector("#wzPrecio");
+  const inCantidad = sheetContent.querySelector("#wzCantidad");
+  const inContenido = sheetContent.querySelector("#wzContenido");
+  const inUnidad = sheetContent.querySelector("#wzUnidad");
+  const btnAnt = sheetContent.querySelector("#wizardAnterior");
+  const btnSig = sheetContent.querySelector("#wizardSiguiente");
 
-  $("#wzPrecio", sheetContent)?.addEventListener("input", (e) => {
-    wizard.datos.precio = e.target.value ? parseNumero(e.target.value) : null;
-  });
-  $("#wzPrecio", sheetContent)?.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") avanzar();
-  });
+  if (inNombre) {
+    inNombre.addEventListener("input", (e) => { wizard.datos.nombre = e.target.value; });
+    inNombre.addEventListener("keypress", (e) => { if (e.key === "Enter") avanzar(); });
+  }
+  if (inPrecio) {
+    inPrecio.addEventListener("input", (e) => { wizard.datos.precio = e.target.value ? parseNumero(e.target.value) : null; });
+    inPrecio.addEventListener("keypress", (e) => { if (e.key === "Enter") avanzar(); });
+  }
+  if (inCantidad) inCantidad.addEventListener("input", (e) => { wizard.datos.cantidad = Math.max(1, Number(e.target.value || 1)); });
+  if (inContenido) inContenido.addEventListener("input", (e) => { wizard.datos.contenido = e.target.value ? parseNumero(e.target.value) : null; });
+  if (inUnidad) inUnidad.addEventListener("change", (e) => { wizard.datos.unidad_medida = e.target.value; });
 
-  $("#wzCantidad", sheetContent)?.addEventListener("input", (e) => {
-    wizard.datos.cantidad = Math.max(1, Number(e.target.value || 1));
-  });
-
-  $("#wzContenido", sheetContent)?.addEventListener("input", (e) => {
-    wizard.datos.contenido = e.target.value ? parseNumero(e.target.value) : null;
-  });
-
-  $("#wzUnidad", sheetContent)?.addEventListener("change", (e) => {
-    wizard.datos.unidad_medida = e.target.value;
-  });
-
-  $("#wizardAnterior", sheetContent).addEventListener("click", retroceder);
-  $("#wizardSiguiente", sheetContent).addEventListener("click", () => {
-    if (wizard.step === 4) guardar();
-    else avanzar();
-  });
+  if (btnAnt) btnAnt.addEventListener("click", retroceder);
+  if (btnSig) btnSig.addEventListener("click", () => { wizard.step === 4 ? guardar() : avanzar(); });
 
   renderStep();
-  // Focus inicial
-  setTimeout(() => $(".input-hero", sheetContent)?.focus(), 100);
+  setTimeout(() => inNombre?.focus(), 50);
 }
 
 function configurarDictado() {
