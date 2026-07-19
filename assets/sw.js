@@ -1,23 +1,8 @@
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3-smart";
 const CACHE_NAME = `quanto-${CACHE_VERSION}`;
 const SCOPE = new URL('.', self.location).pathname;
-const ASSETS_TO_CACHE = [
-  SCOPE,
-  SCOPE + 'index.html',
-  SCOPE + 'manifest.json',
-  SCOPE + 'assets/app.js',
-  SCOPE + 'assets/tokens.css',
-  SCOPE + 'data/store.js',
-];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
-        console.warn("Cache initial assets error:", err);
-      });
-    })
-  );
   self.skipWaiting();
 });
 
@@ -41,24 +26,29 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   if (request.method !== "GET") return;
 
+  const isJsOrCss = request.url.endsWith('.js') || request.url.endsWith('.css');
+  const isHtmlOrManifest = request.url.endsWith('.html') || request.url.endsWith('manifest.json') || request.url.endsWith('/');
+
   event.respondWith(
-    caches.match(request).then((response) => {
-      if (response) return response;
-      return fetch(request).then((response) => {
-        if (!response || response.status !== 200 || response.type !== "basic") {
-          return response;
+    (async () => {
+      try {
+        const networkResponse = await fetch(request);
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseToCache);
+          });
+          return networkResponse;
         }
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, responseToCache);
-        });
-        return response;
-      });
-    })
-    .catch(() => {
-      if (request.destination === "document") {
-        return caches.match("/quanto/index.html");
+        return networkResponse;
+      } catch (error) {
+        const cachedResponse = await caches.match(request);
+        if (cachedResponse) return cachedResponse;
+        if (request.destination === "document") {
+          return caches.match(SCOPE + 'index.html');
+        }
+        throw error;
       }
-    })
+    })()
   );
 });
