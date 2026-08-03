@@ -49,12 +49,16 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 ├── manifest.json           # PWA metadata
 ├── assets/
 │   ├── app.js             # UI logic, event delegation, render functions (1800+ lines)
+│   ├── ocr.js             # Shared OCR module: image preprocessing + label parser
 │   ├── utils.js           # Shared utilities (DOM, format, UI helpers)
 │   ├── tokens.css         # Design system (colors, typography, layout)
 │   └── sw.js              # Service Worker (network-first caching)
 ├── data/
 │   ├── store.js           # Data layer: localStorage + sync queue
 │   └── api.js             # Future API client (stubs for barcode/search)
+├── lab/                   # Internal tools (NOT linked from the app)
+│   ├── etiquetas.html     # Label-testing page: upload photos, see OCR + parse results
+│   └── parser-test.mjs    # Parser unit tests: node lab/parser-test.mjs
 └── docs/                  # Documentation
 ```
 

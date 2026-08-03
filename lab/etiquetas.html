@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Quanto · Lab de etiquetas</title>
+<style>
+  :root {
+    --bg: #f6f5f1; --surface: #fff; --ink: #1b1d1a; --ink-2: #565b53; --ink-3: #8a8f84;
+    --brand: #c41e1e; --ok: #1c7c3c; --ok-soft: #e3f3e8; --bad: #a8352c; --bad-soft: #f9e8e6;
+    --line: #e2e0d9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+    padding: 24px 16px 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h1 small { color: var(--brand); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  .sub { color: var(--ink-2); margin: 0 0 20px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .drop {
+    border: 2px dashed var(--line); border-radius: 14px; padding: 32px 16px;
+    text-align: center; color: var(--ink-2); cursor: pointer; transition: all .15s;
+  }
+  .drop.over, .drop:hover { border-color: var(--brand); background: #fdf6f5; }
+  .opts { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 12px; font-size: 13px; }
+  .opts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  select, textarea, button { font: inherit; }
+  select { padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  button.run {
+    background: var(--brand); color: #fff; border: none; border-radius: 999px;
+    padding: 8px 18px; font-weight: 700; cursor: pointer;
+  }
+  button.run:disabled { opacity: .5; cursor: default; }
+  .status { font-size: 13px; color: var(--ink-2); margin-left: auto; }
+
+  .caso { display: grid; grid-template-columns: 150px 1fr; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .caso:first-child { border-top: none; }
+  .caso img { width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; margin-bottom: 6px; }
+  .caso .imglabel { font-size: 11px; color: var(--ink-3); text-align: center; margin-bottom: 8px; }
+  .caso h3 { margin: 0 0 6px; font-size: 14px; word-break: break-all; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+  .chip { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.meta { background: #eee; color: var(--ink-2); font-weight: 600; }
+  .campos { font-size: 13px; margin: 0 0 8px; }
+  .campos b { display: inline-block; min-width: 86px; color: var(--ink-2); font-weight: 600; }
+  details { font-size: 12px; color: var(--ink-2); }
+  details pre {
+    white-space: pre-wrap; background: #f4f3ef; border-radius: 8px;
+    padding: 10px; max-height: 220px; overflow: auto; margin: 6px 0 0;
+  }
+  .resumen { display: flex; gap: 18px; font-size: 13px; color: var(--ink-2); }
+  .resumen b { font-size: 20px; display: block; color: var(--ink); }
+  textarea { width: 100%; min-height: 90px; border: 1px solid var(--line); border-radius: 10px; padding: 10px; resize: vertical; }
+  .parseout { font-size: 13px; background: #f4f3ef; border-radius: 8px; padding: 10px; margin-top: 8px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><small>Quanto · interno</small><br>Laboratorio de etiquetas</h1>
+  <p class="sub">Sube fotos de etiquetas de góndola para ver qué lee el OCR y qué extrae el parser. Sirve para saber qué etiquetas funcionan y cuáles no.</p>
+
+  <div class="panel">
+    <div class="drop" id="drop">
+      <strong>Arrastra fotos aquí</strong> o haz clic para elegirlas<br>
+      <span style="font-size:12px">También puedes pegar una imagen con Ctrl/Cmd+V</span>
+      <input type="file" id="file" accept="image/*" multiple hidden>
+    </div>
+    <div class="opts">
+      <label><input type="checkbox" id="optPre" checked> Preprocesar imagen (gris + contraste)</label>
+      <label>Segmentación:
+        <select id="optPsm">
+          <option value="3" selected>3 · automática</option>
+          <option value="6">6 · bloque único</option>
+          <option value="11">11 · texto disperso</option>
+        </select>
+      </label>
+      <span class="status" id="status">Sin imágenes todavía.</span>
+    </div>
+  </div>
+
+  <div class="panel" id="resumenPanel" hidden>
+    <div class="resumen">
+      <span><b id="rTotal">0</b> etiquetas</span>
+      <span><b id="rPrecio">0</b> con precio</span>
+      <span><b id="rContenido">0</b> con contenido</span>
+      <span><b id="rCompletas">0</b> completas</span>
+    </div>
+  </div>
+
+  <div class="panel" id="resultados" hidden></div>
+
+  <div class="panel">
+    <strong>Probar el parser con texto directo</strong>
+    <p class="sub" style="margin:4px 0 8px; font-size:13px">Pega aquí texto OCR (o inventado) y mira qué extrae, sin pasar por la cámara.</p>
+    <textarea id="txtManual" placeholder="ATUN REAL LOMITOS&#10;PVP $1.99&#10;Cont. Neto 170 g"></textarea>
+    <div style="margin-top:8px; display:flex; gap:10px; align-items:center">
+      <button class="run" id="btnParse">Parsear texto</button>
+    </div>
+    <div class="parseout" id="parseOut" hidden></div>
+  </div>
+</div>
+
+<script type="module">
+import { parseEtiqueta, preprocesarEtiqueta } from "../assets/ocr.js";
+
+const $ = (s) => document.querySelector(s);
+const status = (m) => { $("#status").textContent = m; };
+
+let worker = null;
+let workerPsm = null;
+
+async function getWorker(psm) {
+  if (!window.Tesseract) {
+    status("Cargando Tesseract…");
+    await new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+      s.onload = res; s.onerror = () => rej(new Error("No se pudo cargar Tesseract (CDN)"));
+      document.head.appendChild(s);
+    });
+  }
+  if (!worker) {
+    status("Iniciando worker OCR (descarga el idioma la primera vez)…");
+    worker = await window.Tesseract.createWorker("spa");
+  }
+  if (workerPsm !== psm) {
+    await worker.setParameters({ tessedit_pageseg_mode: String(psm) });
+    workerPsm = psm;
+  }
+  return worker;
+}
+
+function cargarImagen(file) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function thumbnail(fuente, max = 300) {
+  const w = fuente.naturalWidth || fuente.width, h = fuente.naturalHeight || fuente.height;
+  const esc = Math.min(1, max / w);
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * esc); c.height = Math.round(h * esc);
+  c.getContext("2d").drawImage(fuente, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.75);
+}
+
+const casos = [];
+
+async function procesar(files) {
+  const pre = $("#optPre").checked;
+  const psm = $("#optPsm").value;
+  $("#resultados").hidden = false;
+  $("#resumenPanel").hidden = false;
+
+  for (const file of files) {
+    const div = document.createElement("div");
+    div.className = "caso";
+    div.innerHTML = `<div></div><div><h3>${file.name}</h3><p style="color:var(--ink-3)">Procesando…</p></div>`;
+    $("#resultados").prepend(div);
+
+    try {
+      const img = await cargarImagen(file);
+      const entrada = pre ? preprocesarEtiqueta(img) : img;
+      const t0 = performance.now();
+      const w = await getWorker(psm);
+      status(`Leyendo ${file.name}…`);
+      const { data } = await w.recognize(entrada);
+      const ms = Math.round(performance.now() - t0);
+      const texto = data.text || "";
+      const r = parseEtiqueta(texto);
+      const conf = Math.round(data.confidence ?? 0);
+
+      casos.push(r);
+      pintarResumen();
+
+      const chip = (ok, label) => `<span class="chip ${ok ? "ok" : "bad"}">${ok ? "✓" : "✗"} ${label}</span>`;
+      div.innerHTML = `
+        <div>
+          <img src="${thumbnail(img)}" alt=""><div class="imglabel">original</div>
+          ${pre ? `<img src="${thumbnail(entrada)}" alt=""><div class="imglabel">preprocesada</div>` : ""}
+        </div>
+        <div>
+          <h3>${file.name}</h3>
+          <div class="chips">
+            ${chip(r.precio !== null, "precio")}
+            ${chip(r.contenido !== null, "contenido")}
+            ${chip(!!r.nombre, "nombre")}
+            <span class="chip meta">confianza ${conf}%</span>
+            <span class="chip meta">${ms} ms</span>
+            <span class="chip meta">PSM ${psm}${pre ? " · pre" : " · sin pre"}</span>
+          </div>
+          <p class="campos">
+            <b>Precio</b> ${r.precio !== null ? "$" + r.precio.toFixed(2) : "—"}<br>
+            <b>Contenido</b> ${r.contenido !== null ? r.contenido + " " + r.unidad : "—"}<br>
+            <b>Envases</b> ${r.unidades}<br>
+            <b>Nombre</b> ${r.nombre || "—"}
+          </p>
+          <details><summary>Texto OCR crudo</summary><pre>${texto.replace(/</g, "&lt;") || "(vacío)"}</pre></details>
+        </div>`;
+    } catch (e) {
+      div.querySelector("p").textContent = "Error: " + (e?.message || e);
+    }
+  }
+  status("Listo. Sube más fotos o cambia las opciones y vuelve a subir.");
+}
+
+function pintarResumen() {
+  $("#rTotal").textContent = casos.length;
+  $("#rPrecio").textContent = casos.filter((c) => c.precio !== null).length;
+  $("#rContenido").textContent = casos.filter((c) => c.contenido !== null).length;
+  $("#rCompletas").textContent = casos.filter((c) => c.precio !== null && c.contenido !== null).length;
+}
+
+// --- Entradas: click, drag&drop, paste -----------------------------------
+$("#drop").addEventListener("click", () => $("#file").click());
+$("#file").addEventListener("change", (e) => e.target.files.length && procesar([...e.target.files]));
+$("#drop").addEventListener("dragover", (e) => { e.preventDefault(); $("#drop").classList.add("over"); });
+$("#drop").addEventListener("dragleave", () => $("#drop").classList.remove("over"));
+$("#drop").addEventListener("drop", (e) => {
+  e.preventDefault();
+  $("#drop").classList.remove("over");
+  const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith("image/"));
+  if (files.length) procesar(files);
+});
+document.addEventListener("paste", (e) => {
+  const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+  if (files.length) procesar(files);
+});
+
+// --- Parser directo -------------------------------------------------------
+$("#btnParse").addEventListener("click", () => {
+  const r = parseEtiqueta($("#txtManual").value || "");
+  $("#parseOut").hidden = false;
+  $("#parseOut").textContent = JSON.stringify(r, null, 2);
+});
+</script>
+</body>
+</html>

@@ -358,7 +358,12 @@ button { font: inherit; color: inherit; }
 .cmp-remove:hover { background: var(--danger-soft); color: var(--danger); }
 
 .cmp-fields {
-  display: grid; grid-template-columns: 1.1fr 1.4fr 0.9fr; gap: 8px;
+  display: grid; grid-template-columns: 1fr 1.3fr minmax(98px, auto); gap: 8px;
+}
+.cmp-fgroup { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cmp-flabel {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ink-3); padding-left: 4px;
 }
 .cmp-field {
   display: flex; align-items: center; gap: 4px;
@@ -372,7 +377,10 @@ button { font: inherit; color: inherit; }
   width: 100%; min-width: 0; border: none; background: transparent;
   color: var(--ink); font-size: 15px; font-weight: 650; padding: 0;
   text-align: center;
+  appearance: textfield; -moz-appearance: textfield;
 }
+.cmp-input::-webkit-inner-spin-button,
+.cmp-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .cmp-input:focus { outline: none; }
 .cmp-field-price .cmp-input { text-align: left; }
 .cmp-unit {
@@ -380,7 +388,43 @@ button { font: inherit; color: inherit; }
   font-size: 14px; font-weight: 650; cursor: pointer; padding: 0 2px;
 }
 .cmp-unit:focus { outline: none; }
-.cmp-field-packs { padding: 0 8px; }
+.cmp-field-packs { padding: 0 4px; gap: 0; justify-content: space-between; }
+
+/* Stepper de envases: tocar en vez de teclear */
+.cmp-step {
+  flex: none; width: 30px; height: 30px; border-radius: 50%;
+  border: none; background: var(--surface); color: var(--ink-2);
+  font-size: 17px; font-weight: 700; line-height: 1; cursor: pointer;
+  box-shadow: var(--shadow-1);
+}
+.cmp-step:active { background: var(--brand-soft); color: var(--brand-deep); }
+.cmp-envval { min-width: 22px; text-align: center; font-size: 15px; font-weight: 650; }
+
+/* Chips de tamaños comunes: un toque llena el contenido */
+.cmp-chips {
+  display: flex; gap: 6px; overflow-x: auto; margin-top: 10px;
+  padding-bottom: 2px; scrollbar-width: none;
+}
+.cmp-chips::-webkit-scrollbar { display: none; }
+.cmp-chip {
+  flex: none; border: 1px solid var(--line); border-radius: var(--radius-full);
+  background: var(--surface); color: var(--ink-2);
+  padding: 7px 13px; font-size: 13px; font-weight: 650; cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+.cmp-chip.is-sel {
+  border-color: var(--brand); background: var(--brand-soft); color: var(--brand-deep);
+}
+
+/* Stepper y chips dentro del wizard de agregar item */
+.wz-step {
+  flex: none; width: 40px; height: 40px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
+  font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer;
+  box-shadow: var(--shadow-1);
+}
+.wz-step:active { background: var(--brand-soft); color: var(--brand-deep); border-color: var(--brand-line); }
+.wz-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
 
 .cmp-live {
   margin-top: 10px; font-size: 12.5px; font-weight: 600;

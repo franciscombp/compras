@@ -14,6 +14,7 @@ import {
   getListas, getListaActivaId, setListaActiva, crearLista, renombrarLista,
   duplicarLista, cerrarLista, getHistorialListasCerradas, eliminarItem,
 } from "../data/store.js";
+import { parseNumero, parseEtiqueta, preprocesarEtiqueta } from "./ocr.js";
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -21,8 +22,7 @@ const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const state = {
   view: "home",
   scanReturnTo: "home",
-  compareRows: [nuevaFilaComparacion()],
-  compareStep: 0,
+  compareRows: [nuevaFilaComparacion(), nuevaFilaComparacion()],
 };
 
 function nuevaFilaComparacion(datos = {}) {
@@ -162,7 +162,11 @@ function goto(view) {
 
 function renderView(view) {
   if (view === "home") renderHome();
-  if (view === "comparar") renderResultadosComparacion();
+  if (view === "comparar") {
+    // Comparar necesita al menos dos productos: déjalos listos para llenar.
+    while (state.compareRows.length < 2) state.compareRows.push(nuevaFilaComparacion());
+    renderCompareRows();
+  }
   if (view === "escanear") iniciarEscaneo();
   if (view === "listas") renderListas();
   if (view === "historial") renderHistorial();
@@ -183,10 +187,11 @@ document.addEventListener("click", (e) => {
     return;
   }
 
-  // Comparador: agregar producto
+  // Comparador: agregar producto (y dejar el cursor listo en el precio)
   if (e.target.closest("#addCompareRow")) {
     state.compareRows.push(nuevaFilaComparacion());
     renderCompareRows();
+    $(`#cmp-precio-${state.compareRows.length - 1}`)?.focus();
     return;
   }
 
@@ -248,46 +253,63 @@ function renderCompareRows() {
     return;
   }
 
+  // Tamaños de envase más comunes por unidad: un toque en vez de teclear.
+  const PRESETS_CONTENIDO = {
+    g: [100, 170, 200, 250, 400, 500, 1000],
+    ml: [200, 250, 330, 500, 750, 1000, 2000],
+    unidad: [1, 2, 4, 6, 12],
+  };
+
   $("#compareRows").innerHTML = rows.map((row, i) => {
     const unidad = row.unidad || "g";
     const letra = String.fromCharCode(65 + i);
     const phCant = unidad === "unidad" ? "1" : unidad === "ml" ? "500" : "100";
+    const sufijo = unidad === "unidad" ? " u" : ` ${unidad}`;
+    const chips = PRESETS_CONTENIDO[unidad] || PRESETS_CONTENIDO.g;
     return `
     <div class="cmp-card" data-i="${i}">
       <div class="cmp-card-top">
         <span class="cmp-badge">${letra}</span>
-        <input class="cmp-name" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="Nombre del producto" autocomplete="off">
+        <input class="cmp-name" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="Nombre (opcional)" autocomplete="off">
         ${rows.length > 1 ? `<button class="cmp-remove" data-remove="${i}" aria-label="Quitar producto ${letra}">✕</button>` : ""}
       </div>
 
       <div class="cmp-fields">
-        <div class="cmp-field cmp-field-price">
-          <span class="cmp-affix">$</span>
-          <input class="cmp-input tabular" id="cmp-precio-${i}" data-k="precio" type="number" inputmode="decimal" step="0.01" min="0" value="${row.precio ?? ""}" placeholder="0.00" autocomplete="off" aria-label="Precio del producto ${letra}">
+        <div class="cmp-fgroup">
+          <span class="cmp-flabel" id="cmp-lprecio-${i}">Precio</span>
+          <div class="cmp-field cmp-field-price">
+            <span class="cmp-affix">$</span>
+            <input class="cmp-input tabular" id="cmp-precio-${i}" data-k="precio" type="number" inputmode="decimal" step="0.01" min="0" value="${row.precio ?? ""}" placeholder="0.00" autocomplete="off" aria-labelledby="cmp-lprecio-${i}">
+          </div>
         </div>
-        <div class="cmp-field cmp-field-amount">
-          <input class="cmp-input tabular" id="cmp-cantidad-${i}" data-k="cantidad" type="number" inputmode="decimal" step="any" min="0" value="${row.cantidad ?? ""}" placeholder="${phCant}" autocomplete="off" aria-label="Contenido del producto ${letra}">
-          <select class="cmp-unit" data-k="unidad" aria-label="Unidad del producto ${letra}">
-            <option value="g" ${unidad === "g" ? "selected" : ""}>g</option>
-            <option value="ml" ${unidad === "ml" ? "selected" : ""}>ml</option>
-            <option value="unidad" ${unidad === "unidad" ? "selected" : ""}>u</option>
-          </select>
+        <div class="cmp-fgroup">
+          <span class="cmp-flabel" id="cmp-lcant-${i}">Contenido</span>
+          <div class="cmp-field cmp-field-amount">
+            <input class="cmp-input tabular" id="cmp-cantidad-${i}" data-k="cantidad" type="number" inputmode="decimal" step="any" min="0" value="${row.cantidad ?? ""}" placeholder="${phCant}" autocomplete="off" aria-labelledby="cmp-lcant-${i}">
+            <select class="cmp-unit" data-k="unidad" aria-label="Unidad del producto ${letra}">
+              <option value="g" ${unidad === "g" ? "selected" : ""}>g</option>
+              <option value="ml" ${unidad === "ml" ? "selected" : ""}>ml</option>
+              <option value="unidad" ${unidad === "unidad" ? "selected" : ""}>u</option>
+            </select>
+          </div>
         </div>
-        <div class="cmp-field cmp-field-packs">
-          <span class="cmp-affix">×</span>
-          <input class="cmp-input tabular" id="cmp-unidades-${i}" data-k="unidades" type="number" inputmode="numeric" step="1" min="1" value="${row.unidades ?? 1}" autocomplete="off" aria-label="Número de envases del producto ${letra}">
+        <div class="cmp-fgroup">
+          <span class="cmp-flabel" id="cmp-lenv-${i}">Envases</span>
+          <div class="cmp-field cmp-field-packs">
+            <button type="button" class="cmp-step" data-env-step="-1" aria-label="Menos envases">−</button>
+            <span class="cmp-envval tabular" aria-labelledby="cmp-lenv-${i}">${row.unidades ?? 1}</span>
+            <button type="button" class="cmp-step" data-env-step="1" aria-label="Más envases">+</button>
+          </div>
         </div>
+      </div>
+
+      <div class="cmp-chips" role="group" aria-label="Tamaños comunes del producto ${letra}">
+        ${chips.map((v) => `<button type="button" class="cmp-chip ${row.cantidad === v ? "is-sel" : ""}" data-preset="${v}">${v}${sufijo}</button>`).join("")}
       </div>
 
       <div class="cmp-live" data-total-row="${i}"></div>
     </div>`;
   }).join("");
-
-  // El ejemplo solo tiene sentido cuando aún no hay datos escritos.
-  const hayDatos = rows.some((r) => r.nombre.trim() || r.precio || r.cantidad);
-  const exampleRow = $("#fillExampleRow");
-  if (exampleRow) exampleRow.style.display = hayDatos ? "none" : "";
-
   renderResultadosComparacion();
 }
 
@@ -318,6 +340,27 @@ $("#compareRows").addEventListener("click", (e) => {
   if (btn) {
     state.compareRows.splice(Number(btn.dataset.remove), 1);
     renderCompareRows();
+    return;
+  }
+
+  const card = e.target.closest("[data-i]");
+  if (!card) return;
+  const i = Number(card.dataset.i);
+
+  // Chip de tamaño común: un toque llena el contenido.
+  const chip = e.target.closest("[data-preset]");
+  if (chip) {
+    state.compareRows[i].cantidad = Number(chip.dataset.preset);
+    renderCompareRows();
+    return;
+  }
+
+  // Stepper de envases: -/+ sin teclado.
+  const step = e.target.closest("[data-env-step]");
+  if (step) {
+    const actual = state.compareRows[i].unidades ?? 1;
+    state.compareRows[i].unidades = Math.min(48, Math.max(1, actual + Number(step.dataset.envStep)));
+    renderCompareRows();
   }
 });
 
@@ -337,6 +380,11 @@ function filaValida(r) {
 }
 
 function renderResultadosComparacion() {
+  // El ejemplo solo tiene sentido cuando aún no hay nada escrito.
+  const hayDatos = state.compareRows.some((r) => r.nombre.trim() || r.precio || r.cantidad);
+  const exampleRow = $("#fillExampleRow");
+  if (exampleRow) exampleRow.style.display = hayDatos ? "none" : "";
+
   // Actualiza la línea en vivo de cada tarjeta sin re-renderizar los inputs.
   state.compareRows.forEach((row, i) => {
     const slot = $(`[data-total-row="${i}"]`);
@@ -347,7 +395,11 @@ function renderResultadosComparacion() {
       slot.textContent = `${fmt(n.normalizado)} ${n.baseLabel} · total ${n.totalContenido} ${u}`;
       slot.classList.add("is-on");
     } else {
-      slot.textContent = "Faltan datos";
+      const falta = [];
+      if (!(row.precio > 0)) falta.push("el precio");
+      if (!(row.cantidad > 0)) falta.push("el contenido");
+      if (!(row.unidades > 0)) falta.push("los envases");
+      slot.textContent = falta.length ? `Falta ${falta.join(" y ")}` : "";
       slot.classList.remove("is-on");
     }
   });
@@ -501,116 +553,8 @@ function getOcrWorker() {
 
 async function leerEtiqueta(canvas) {
   const worker = await getOcrWorker();
-  const { data } = await worker.recognize(canvas);
+  const { data } = await worker.recognize(preprocesarEtiqueta(canvas));
   return { texto: data.text || "", confianza: data.confidence ?? 0 };
-}
-
-/**
- * Extrae precio, contenido, nº de envases y candidato a nombre del texto OCR.
- * Entiende los formatos habituales de góndola:
- *  - precio con o sin símbolo, cerca de palabras clave (PVP, precio, ahora, oferta)
- *  - "antes / ahora": se queda con el precio de oferta, no con el tachado
- *  - packs: "6 x 80 g", "pack 6 unidades", "3 un x 170g"
- *  - medidas en g, kg, mg, ml, cc, cl, l, lb, oz (convierte a g / ml)
- *  - precio unitario ya impreso ("$3.99/kg", "1.25 por 100 g") - si la etiqueta
- *    no trae gramaje, el contenido se deduce de ahí
- */
-function parseNumero(s) {
-  return Number(String(s).replace(",", "."));
-}
-
-const UNIDADES_MEDIDA = {
-  kg: ["g", 1000], kilo: ["g", 1000], kilos: ["g", 1000], kgs: ["g", 1000],
-  g: ["g", 1], gr: ["g", 1], grs: ["g", 1], gramo: ["g", 1], gramos: ["g", 1],
-  mg: ["g", 0.001],
-  lb: ["g", 453.6], lbs: ["g", 453.6], libra: ["g", 453.6], libras: ["g", 453.6],
-  oz: ["g", 28.35],
-  ml: ["ml", 1], cc: ["ml", 1], cl: ["ml", 10],
-  l: ["ml", 1000], lt: ["ml", 1000], lts: ["ml", 1000], litro: ["ml", 1000], litros: ["ml", 1000],
-};
-const RE_UNIDAD = "kgs?|kilos?|grs?|gramos?|mg|lbs?|libras?|oz|ml|cc|cl|lts?|litros?|g|l";
-
-function parseEtiqueta(texto) {
-  let t = texto.replace(/\s+/g, " ");
-
-  // --- Precio unitario impreso ("$3.99/kg", "0.85 por 100 g", "1.10 c/u") --
-  // Se detecta primero y se retira del texto: su número no es el precio total
-  // ni su medida ("100 g") es el contenido del envase.
-  let unitarioImpreso = null; // { base, porCien } o { base: "unidad", porUno }
-  const unit = t.match(new RegExp(`(?:\\$|usd)?\\s*(\\d{1,4}[.,]\\d{1,2})\\s*(?:\\/|por\\s+)(?:cada\\s+)?(100\\s*)?(${RE_UNIDAD})\\b`, "i"));
-  if (unit) {
-    const conv = UNIDADES_MEDIDA[unit[3].toLowerCase()];
-    if (conv) {
-      const cantidadRef = (unit[2] ? 100 : 1) * conv[1]; // en g o ml
-      unitarioImpreso = { base: conv[0], porCien: (parseNumero(unit[1]) / cantidadRef) * 100 };
-      t = t.replace(unit[0], " ");
-    }
-  }
-  const cu = t.match(/(?:\$\s*)?(\d{1,4}[.,]\d{2})\s*c\s*\/?\s*u\b/i);
-  if (cu) { unitarioImpreso = { base: "unidad", porUno: parseNumero(cu[1]) }; }
-
-  // --- Precio: junta candidatos y elige el más creíble ---------------------
-  const candidatos = [];
-  for (const m of t.matchAll(/(\$|usd\s*)?\s*(\d{1,4}[.,]\d{2})(?![\d])/gi)) {
-    const antesDe = t.slice(Math.max(0, m.index - 18), m.index).toLowerCase();
-    let peso = 0;
-    if (m[1]) peso += 2;                                             // trae símbolo
-    if (/pvp|precio|ahora|oferta|lleva|paga/.test(antesDe)) peso += 3; // palabra clave
-    if (/antes|normal|regular|tachado/.test(antesDe)) peso -= 4;      // precio viejo
-    if (/\/|por\s*$/.test(antesDe)) peso -= 2;                        // es unitario, no total
-    candidatos.push({ valor: parseNumero(m[2]), peso, index: m.index });
-  }
-  // Entero con símbolo ("$3") como último recurso
-  const entero = t.match(/\$\s*(\d{1,4})(?![\d.,])/);
-  if (entero && !candidatos.length) candidatos.push({ valor: Number(entero[1]), peso: 0, index: entero.index });
-  candidatos.sort((a, b) => b.peso - a.peso || a.index - b.index);
-  let precio = candidatos[0]?.valor ?? null;
-  if (precio !== null && (precio <= 0 || precio > 5000)) precio = null;
-
-  // --- Pack: "6 x 80 g", "pack de 6", "x6", "6 unid" -----------------------
-  let unidades = 1;
-  const packMedida = t.match(new RegExp(`(\\d{1,2})\\s*(?:x|×)\\s*(\\d+(?:[.,]\\d+)?)\\s*(${RE_UNIDAD})\\b`, "i"));
-  const packSolo = t.match(/(?:pack\s*(?:de\s*)?|x\s?)(\d{1,2})\s*(?:un(?:id(?:ades)?)?\.?\b|$)/i)
-    || t.match(/(\d{1,2})\s*un(?:id(?:ades)?)?\.?\b/i);
-  if (packMedida) unidades = Number(packMedida[1]);
-  else if (packSolo) unidades = Number(packSolo[1]);
-  if (unidades < 1 || unidades > 48) unidades = 1;
-
-  // --- Contenido por envase ------------------------------------------------
-  let contenido = null, unidad = null;
-  const medida = packMedida
-    ? { valor: packMedida[2], u: packMedida[3] }
-    : (() => {
-        const m = t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(${RE_UNIDAD})\\b`, "i"));
-        return m ? { valor: m[1], u: m[2] } : null;
-      })();
-  if (medida) {
-    const conv = UNIDADES_MEDIDA[medida.u.toLowerCase()];
-    if (conv) {
-      unidad = conv[0];
-      contenido = Math.round(parseNumero(medida.valor) * conv[1]);
-      if (contenido <= 0) { contenido = null; unidad = null; }
-    }
-  }
-
-  // Sin gramaje pero con precio total y unitario impreso => deducir contenido
-  if (!contenido && precio && unitarioImpreso?.porCien) {
-    contenido = Math.round((precio / unitarioImpreso.porCien) * 100 / unidades);
-    unidad = unitarioImpreso.base;
-  }
-
-  // --- Nombre: la línea "más de producto" del texto ------------------------
-  const RUIDO = /pvp|precio|oferta|ahora|antes|lleva|gratis|paga|ahorr|promo|desc|unid|total|caja|cod|sku/i;
-  const nombre = texto.split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length >= 4 && /[a-záéíóúñ]{4,}/i.test(l) && !RUIDO.test(l))
-    .sort((a, b) => {
-      // prefiere líneas sin dígitos; entre iguales, la más larga
-      const da = /\d/.test(a) ? 1 : 0, db = /\d/.test(b) ? 1 : 0;
-      return da - db || b.length - a.length;
-    })[0] || "";
-
-  return { precio, contenido, unidad, unidades, nombre };
 }
 
 const PROBLEMAS_CAMARA = {
@@ -1389,6 +1333,7 @@ function openAddItemSheet(prefill = {}) {
             <p class="sheet-sub">¿Cuántos vas a llevar?</p>
             <div style="margin:40px 0 32px">
               <div class="wizard-big-number">
+                <button type="button" class="wz-step" data-wz-cant="-1" aria-label="Menos unidades">−</button>
                 <input class="input-hero" id="wzCantidad" type="number"
                   value="${wizard.datos.cantidad}"
                   placeholder="1"
@@ -1396,8 +1341,9 @@ function openAddItemSheet(prefill = {}) {
                   inputmode="numeric"
                   autocomplete="off"
                   style="width:90px; text-align:center">
-                <span class="unit">unid.</span>
+                <button type="button" class="wz-step" data-wz-cant="1" aria-label="Más unidades">+</button>
               </div>
+              <div class="wizard-hint" style="margin-top:10px">unidades</div>
             </div>
           </div>
         </div>
@@ -1423,6 +1369,9 @@ function openAddItemSheet(prefill = {}) {
                   <option value="ml" ${wizard.datos.unidad_medida === "ml" ? "selected" : ""}>ml</option>
                   <option value="unidad" ${wizard.datos.unidad_medida === "unidad" ? "selected" : ""}>un.</option>
                 </select>
+              </div>
+              <div class="wz-chips">
+                ${[100, 170, 200, 250, 330, 500, 750, 1000].map((v) => `<button type="button" class="cmp-chip" data-wz-cont="${v}">${v}</button>`).join("")}
               </div>
               <div class="wizard-hint">Ayuda a calcular el precio real por 100g/ml</div>
             </div>
@@ -1476,16 +1425,29 @@ function openAddItemSheet(prefill = {}) {
   const btnAnt = sheetContent.querySelector("#wizardAnterior");
   const btnSig = sheetContent.querySelector("#wizardSiguiente");
 
+  // Cada cambio revalida el paso: sin esto "Siguiente" se queda bloqueado.
   if (inNombre) {
-    inNombre.addEventListener("input", (e) => { wizard.datos.nombre = e.target.value; });
-    inNombre.addEventListener("keypress", (e) => { if (e.key === "Enter") avanzar(); });
+    inNombre.addEventListener("input", (e) => { wizard.datos.nombre = e.target.value; renderStep(); });
+    inNombre.addEventListener("keypress", (e) => { if (e.key === "Enter" && wizard.datos.nombre.trim().length >= 2) avanzar(); });
   }
   if (inPrecio) {
-    inPrecio.addEventListener("input", (e) => { wizard.datos.precio = e.target.value ? parseNumero(e.target.value) : null; });
-    inPrecio.addEventListener("keypress", (e) => { if (e.key === "Enter") avanzar(); });
+    inPrecio.addEventListener("input", (e) => { wizard.datos.precio = e.target.value ? parseNumero(e.target.value) : null; renderStep(); });
+    inPrecio.addEventListener("keypress", (e) => { if (e.key === "Enter" && wizard.datos.precio > 0) avanzar(); });
   }
-  if (inCantidad) inCantidad.addEventListener("input", (e) => { wizard.datos.cantidad = Math.max(1, Number(e.target.value || 1)); });
-  if (inContenido) inContenido.addEventListener("input", (e) => { wizard.datos.contenido = e.target.value ? parseNumero(e.target.value) : null; });
+  if (inCantidad) inCantidad.addEventListener("input", (e) => { wizard.datos.cantidad = Math.max(1, Number(e.target.value || 1)); renderStep(); });
+  if (inContenido) inContenido.addEventListener("input", (e) => { wizard.datos.contenido = e.target.value ? parseNumero(e.target.value) : null; renderStep(); });
+
+  // Stepper de cantidad y chips de contenido: tocar en vez de teclear.
+  $$("[data-wz-cant]", sheetContent).forEach((b) => b.addEventListener("click", () => {
+    wizard.datos.cantidad = Math.min(99, Math.max(1, (wizard.datos.cantidad || 1) + Number(b.dataset.wzCant)));
+    if (inCantidad) inCantidad.value = wizard.datos.cantidad;
+    renderStep();
+  }));
+  $$("[data-wz-cont]", sheetContent).forEach((b) => b.addEventListener("click", () => {
+    wizard.datos.contenido = Number(b.dataset.wzCont);
+    if (inContenido) inContenido.value = wizard.datos.contenido;
+    renderStep();
+  }));
   if (inUnidad) inUnidad.addEventListener("change", (e) => { wizard.datos.unidad_medida = e.target.value; });
 
   if (btnAnt) btnAnt.addEventListener("click", retroceder);
