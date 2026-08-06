@@ -2,7 +2,7 @@
  * Test rápido del parser de etiquetas (sin OCR, texto directo).
  * Correr con: node lab/parser-test.mjs
  */
-import { parseEtiqueta } from "../assets/ocr.js";
+import { parseEtiqueta, extraerPistas, extraerMedidaDeNombre } from "../assets/ocr.js";
 
 const casos = [
   {
@@ -57,9 +57,17 @@ const casos = [
   },
 ];
 
+// La pista de "texto más grande" debe ganar sobre otros números plausibles.
+casos.push({
+  nombre: "pista de texto grande elige el precio correcto",
+  texto: "Cod 4520.11\nGalletas 175 g\n2.35",
+  pistas: { precioGrande: 2.35 },
+  espera: { precio: 2.35, contenido: 175, unidad: "g" },
+});
+
 let fallos = 0;
 for (const c of casos) {
-  const r = parseEtiqueta(c.texto);
+  const r = parseEtiqueta(c.texto, c.pistas || {});
   const errores = [];
   for (const [k, v] of Object.entries(c.espera)) {
     const got = r[k];
@@ -74,6 +82,34 @@ for (const c of casos) {
   } else {
     console.log(`✓ ${c.nombre}`);
   }
+}
+
+// --- extraerPistas: la palabra numérica más alta destaca sobre la mediana --
+const dataFake = {
+  blocks: [{ paragraphs: [{ lines: [{ words: [
+    { text: "Galletas", bbox: { y0: 0, y1: 20 } },
+    { text: "175", bbox: { y0: 0, y1: 20 } },
+    { text: "$2.35", bbox: { y0: 40, y1: 120 } },
+  ] }] }] }],
+};
+const pistas = extraerPistas(dataFake);
+if (pistas.precioGrande !== 2.35) {
+  fallos++;
+  console.log(`✗ extraerPistas: esperaba 2.35, salió ${JSON.stringify(pistas)}`);
+} else console.log("✓ extraerPistas detecta el número más grande");
+
+// --- extraerMedidaDeNombre: para normalizar catálogos ----------------------
+const medidas = [
+  ["Atún lomitos 3 x 170 g", { contenido: 170, unidad: "g", unidades: 3 }],
+  ["Leche entera 1L", { contenido: 1000, unidad: "ml", unidades: 1 }],
+  ["Coca-Cola 1.35 lt", { contenido: 1350, unidad: "ml", unidades: 1 }],
+  ["Jabón de tocador", { contenido: null, unidad: null, unidades: 1 }],
+];
+for (const [nombre, esp] of medidas) {
+  const r = extraerMedidaDeNombre(nombre);
+  const ok = r.contenido === esp.contenido && r.unidad === esp.unidad && r.unidades === esp.unidades;
+  if (!ok) { fallos++; console.log(`✗ medida "${nombre}": ${JSON.stringify(r)}`); }
+  else console.log(`✓ medida "${nombre}"`);
 }
 
 console.log(fallos ? `\n${fallos} caso(s) fallando` : "\nTodos los casos pasan");

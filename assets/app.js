@@ -14,7 +14,8 @@ import {
   getListas, getListaActivaId, setListaActiva, crearLista, renombrarLista,
   duplicarLista, cerrarLista, getHistorialListasCerradas, eliminarItem,
 } from "../data/store.js";
-import { parseNumero, parseEtiqueta, preprocesarEtiqueta } from "./ocr.js";
+import { parseNumero, parseLectura, preprocesarEtiqueta } from "./ocr.js";
+import { services } from "../data/api.js";
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -270,7 +271,7 @@ function renderCompareRows() {
     <div class="cmp-card" data-i="${i}">
       <div class="cmp-card-top">
         <span class="cmp-badge">${letra}</span>
-        <input class="cmp-name" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="Nombre (opcional)" autocomplete="off">
+        <input class="cmp-name" id="cmp-nombre-${i}" data-k="nombre" value="${esc(row.nombre)}" placeholder="Nombre (opcional)" autocomplete="off" list="catalogoSug">
         ${rows.length > 1 ? `<button class="cmp-remove" data-remove="${i}" aria-label="Quitar producto ${letra}">✕</button>` : ""}
       </div>
 
@@ -313,6 +314,33 @@ function renderCompareRows() {
   renderResultadosComparacion();
 }
 
+// Sugerencias del catálogo mientras se escribe el nombre; al elegir una,
+// el contenido/unidad (y precio si el catálogo lo trae) se llenan solos.
+let sugerenciasTimer = null;
+let ultimasSugerencias = [];
+function sugerirDelCatalogo(texto, fila) {
+  clearTimeout(sugerenciasTimer);
+  sugerenciasTimer = setTimeout(async () => {
+    ultimasSugerencias = await services.searchProduct(texto);
+    const dl = $("#catalogoSug");
+    if (dl) dl.innerHTML = ultimasSugerencias.map((s) => `<option value="${esc(s.nombre)}"></option>`).join("");
+  }, 180);
+
+  // ¿Eligió una sugerencia exacta? Autollenar lo que falte.
+  const elegida = ultimasSugerencias.find((s) => s.nombre === texto);
+  if (elegida) {
+    const row = state.compareRows[fila];
+    if (elegida.contenido && !row.cantidad) {
+      row.cantidad = elegida.contenido;
+      row.unidad = elegida.unidad || row.unidad;
+      row.unidades = elegida.envases || 1;
+    }
+    if (elegida.precio && !row.precio) row.precio = elegida.precio;
+    renderCompareRows();
+    toast(`Datos de "${elegida.nombre}" puestos`);
+  }
+}
+
 $("#compareRows").addEventListener("input", (e) => {
   const card = e.target.closest("[data-i]");
   if (!card) return;
@@ -323,6 +351,7 @@ $("#compareRows").addEventListener("input", (e) => {
   state.compareRows[i][k] = ["precio", "cantidad", "unidades"].includes(k)
     ? (v === "" ? null : Number(v))
     : v;
+  if (k === "nombre") sugerirDelCatalogo(v, i);
   renderResultadosComparacion();
 });
 
@@ -553,8 +582,10 @@ function getOcrWorker() {
 
 async function leerEtiqueta(canvas) {
   const worker = await getOcrWorker();
-  const { data } = await worker.recognize(preprocesarEtiqueta(canvas));
-  return { texto: data.text || "", confianza: data.confidence ?? 0 };
+  // blocks:true trae las cajas de cada palabra: el tamaño del texto es la
+  // mejor pista para distinguir el precio del resto de números.
+  const { data } = await worker.recognize(preprocesarEtiqueta(canvas), {}, { text: true, blocks: true });
+  return { data, texto: data.text || "", confianza: data.confidence ?? 0 };
 }
 
 const PROBLEMAS_CAMARA = {
@@ -698,7 +729,7 @@ async function capturarEtiqueta() {
   setScanStatus("Leyendo etiqueta…");
   try {
     const lectura = await leerEtiqueta(canvas);
-    const datos = parseEtiqueta(lectura.texto);
+    const datos = parseLectura(lectura.data);
     if (datos.precio === null && datos.contenido === null) {
       setScanStatus("No se leyó un precio - acércate a la etiqueta y captura otra vez.");
       return;
@@ -775,7 +806,7 @@ async function cicloAuto() {
       autoLentos = 0;
     }
     if (!scanSession.auto) return;
-    const datos = parseEtiqueta(lectura.texto);
+    const datos = parseLectura(lectura.data);
     if (datos.precio === null || lectura.confianza < 55) { autoFirmaPrevia = null; return; }
     const firma = `${datos.precio}|${datos.contenido ?? ""}`;
     const yaCapturada = scanSession.capturas.some(

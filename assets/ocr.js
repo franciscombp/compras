@@ -58,7 +58,7 @@ function unirCentavosSueltos(t) {
  *  - precio unitario ya impreso ("$3.99/kg", "1.25 por 100 g") - si la etiqueta
  *    no trae gramaje, el contenido se deduce de ahí
  */
-export function parseEtiqueta(texto) {
+export function parseEtiqueta(texto, pistas = {}) {
   let t = texto.replace(/\s+/g, " ");
   t = corregirDigitos(t);
   t = unirCentavosSueltos(t);
@@ -100,13 +100,17 @@ export function parseEtiqueta(texto) {
     if (/pvp|precio|ahora|oferta|lleva|paga/.test(antesDe)) peso += 3; // palabra clave
     if (/antes|normal|regular|tachado/.test(antesDe)) peso -= 4;      // precio viejo
     if (/\/|por\s*$/.test(antesDe)) peso -= 2;                        // es unitario, no total
-    candidatos.push({ valor: parseNumero(m[2]), peso, index: m.index });
+    const valor = parseNumero(m[2]);
+    // En góndola el precio es el texto más grande: si coincide con la
+    // palabra más alta que vio el OCR, es casi seguro el bueno.
+    if (pistas.precioGrande !== undefined && Math.abs(valor - pistas.precioGrande) < 0.005) peso += 5;
+    candidatos.push({ valor, peso, index: m.index });
   }
   // Entero con símbolo ("$3") como último recurso
   const entero = t.match(/\$\s*(\d{1,4})(?![\d.,])/);
   if (entero && !candidatos.length) candidatos.push({ valor: Number(entero[1]), peso: 0, index: entero.index });
   candidatos.sort((a, b) => b.peso - a.peso || a.index - b.index);
-  let precio = promo ? promo.precio : (candidatos[0]?.valor ?? null);
+  let precio = promo ? promo.precio : (candidatos[0]?.valor ?? pistas.precioGrande ?? null);
   if (precio !== null && (precio <= 0 || precio > 5000)) precio = null;
 
   // --- Pack: "6 x 80 g", "pack de 6", "x6", "6 unid" -----------------------
@@ -165,6 +169,75 @@ export function parseEtiqueta(texto) {
     })[0] || "";
 
   return { precio, contenido, unidad, unidades, nombre };
+}
+
+/**
+ * Recorre las palabras que devuelve Tesseract (con sus cajas) y busca el
+ * número "más alto" de la imagen. En una etiqueta de góndola ese casi
+ * siempre es el precio. Solo cuenta si destaca sobre el tamaño mediano,
+ * para no confundir una foto de texto parejo.
+ */
+export function extraerPistas(data) {
+  const words = [];
+  const push = (w) => { if (w?.text && w?.bbox) words.push(w); };
+  if (Array.isArray(data?.words)) data.words.forEach(push);
+  else if (Array.isArray(data?.blocks)) {
+    for (const b of data.blocks)
+      for (const p of b.paragraphs || [])
+        for (const l of p.lines || [])
+          for (const w of l.words || []) push(w);
+  }
+  if (!words.length) return {};
+
+  let mejor = null;
+  for (const w of words) {
+    const m = w.text.match(/^\$?(\d{1,4}(?:[.,]\d{1,2})?)\$?$/);
+    if (!m) continue;
+    const valor = parseNumero(m[1]);
+    if (valor <= 0 || valor > 5000) continue;
+    const alto = (w.bbox.y1 ?? 0) - (w.bbox.y0 ?? 0);
+    if (alto > 0 && (!mejor || alto > mejor.alto)) mejor = { valor, alto };
+  }
+  if (!mejor) return {};
+
+  const altos = words.map((w) => (w.bbox.y1 ?? 0) - (w.bbox.y0 ?? 0)).filter((x) => x > 0).sort((a, b) => a - b);
+  const mediana = altos[Math.floor(altos.length / 2)] || 0;
+  return mejor.alto >= mediana * 1.6 ? { precioGrande: mejor.valor } : {};
+}
+
+/** Parsea una lectura completa de Tesseract: texto + pista del texto grande. */
+export function parseLectura(data) {
+  return parseEtiqueta(data?.text || "", extraerPistas(data));
+}
+
+/**
+ * Extrae contenido/unidad/pack del NOMBRE de un producto de catálogo
+ * ("Atún lomitos 3 x 170 g", "Leche entera 1L"). Lo usa el catálogo de
+ * súper para normalizar productos descargados.
+ */
+export function extraerMedidaDeNombre(nombre) {
+  const t = String(nombre || "");
+  let unidades = 1, contenido = null, unidad = null;
+  const pack = t.match(new RegExp(`(\\d{1,2})\\s*(?:x|×)\\s*(\\d+(?:[.,]\\d+)?)\\s*(${RE_UNIDAD})\\b`, "i"));
+  const solo = t.match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(${RE_UNIDAD})\\b`, "i"));
+  const m = pack ? { n: pack[1], v: pack[2], u: pack[3] } : solo ? { n: 1, v: solo[1], u: solo[2] } : null;
+  if (m) {
+    const conv = UNIDADES_MEDIDA[m.u.toLowerCase()];
+    if (conv) {
+      unidades = Math.max(1, Number(m.n) || 1);
+      contenido = Math.round(parseNumero(m.v) * conv[1]);
+      unidad = conv[0];
+      if (contenido <= 0) { contenido = null; unidad = null; unidades = 1; }
+    }
+  } else {
+    // "15 unidades", "12 und": productos que se cuentan, no se pesan.
+    const porUnidades = t.match(/(\d{1,3})\s*(?:unidades|unid|und|un|u)\.?\b/i);
+    if (porUnidades) {
+      const n = Number(porUnidades[1]);
+      if (n > 0 && n <= 500) { contenido = n; unidad = "unidad"; unidades = 1; }
+    }
+  }
+  return { contenido, unidad, unidades };
 }
 
 /**

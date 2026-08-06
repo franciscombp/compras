@@ -1,0 +1,38 @@
+name: Actualizar catálogo de productos
+
+on:
+  schedule:
+    # Lunes 09:00 UTC (04:00 Ecuador)
+    - cron: "0 9 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Descargar catálogo desde las fuentes
+        run: node lab/fetch-catalogo.mjs
+
+      - name: Mostrar reporte de fuentes
+        run: cat lab/catalogo-report.json
+
+      - name: Commit si hay cambios
+        run: |
+          git config user.name "catalogo-bot"
+          git config user.email "actions@github.com"
+          git add data/catalogo.json lab/catalogo-report.json
+          if git diff --cached --quiet; then
+            echo "Sin cambios en el catálogo."
+          else
+            git commit -m "Actualización semanal del catálogo de productos"
+            git push
+          fi

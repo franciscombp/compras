@@ -55,10 +55,14 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   └── sw.js              # Service Worker (network-first caching)
 ├── data/
 │   ├── store.js           # Data layer: localStorage + sync queue
-│   └── api.js             # Future API client (stubs for barcode/search)
+│   ├── api.js             # searchProduct (local catalog) + searchByBarcode (Open Food Facts)
+│   └── catalogo.json      # Product catalog: seed + weekly GitHub Action updates
 ├── lab/                   # Internal tools (NOT linked from the app)
 │   ├── etiquetas.html     # Label-testing page: upload photos, see OCR + parse results
-│   └── parser-test.mjs    # Parser unit tests: node lab/parser-test.mjs
+│   ├── parser-test.mjs    # Parser unit tests: node lab/parser-test.mjs
+│   └── fetch-catalogo.mjs # Catalog fetcher (runs in weekly GitHub Action)
+├── .github/workflows/
+│   └── actualizar-catalogo.yml  # Weekly cron (Mon 09:00 UTC) + manual dispatch
 └── docs/                  # Documentation
 ```
 

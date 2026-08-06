@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v11-ocr-y-chips";
+const CACHE_VERSION = "v12-catalogo";
 const CACHE_NAME = `quanto-${CACHE_VERSION}`;
 const SCOPE = new URL('.', self.location).pathname;
 

@@ -108,7 +108,7 @@
 </div>
 
 <script type="module">
-import { parseEtiqueta, preprocesarEtiqueta } from "../assets/ocr.js";
+import { parseEtiqueta, parseLectura, extraerPistas, preprocesarEtiqueta } from "../assets/ocr.js";
 
 const $ = (s) => document.querySelector(s);
 const status = (m) => { $("#status").textContent = m; };
@@ -175,10 +175,11 @@ async function procesar(files) {
       const t0 = performance.now();
       const w = await getWorker(psm);
       status(`Leyendo ${file.name}…`);
-      const { data } = await w.recognize(entrada);
+      const { data } = await w.recognize(entrada, {}, { text: true, blocks: true });
       const ms = Math.round(performance.now() - t0);
       const texto = data.text || "";
-      const r = parseEtiqueta(texto);
+      const pistas = extraerPistas(data);
+      const r = parseLectura(data);
       const conf = Math.round(data.confidence ?? 0);
 
       casos.push(r);
@@ -199,6 +200,7 @@ async function procesar(files) {
             <span class="chip meta">confianza ${conf}%</span>
             <span class="chip meta">${ms} ms</span>
             <span class="chip meta">PSM ${psm}${pre ? " · pre" : " · sin pre"}</span>
+            ${pistas.precioGrande !== undefined ? `<span class="chip meta">texto grande: $${pistas.precioGrande}</span>` : ""}
           </div>
           <p class="campos">
             <b>Precio</b> ${r.precio !== null ? "$" + r.precio.toFixed(2) : "—"}<br>
