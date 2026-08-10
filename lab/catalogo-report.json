@@ -1,0 +1,30 @@
+{
+  "corrida": "2026-08-10T10:13:03.753Z",
+  "fuentes": [
+    {
+      "id": "openfoodfacts-ec",
+      "ok": false,
+      "error": "HTTP 503"
+    },
+    {
+      "id": "vtex:aki.com.ec",
+      "ok": false,
+      "error": "HTTP 404"
+    },
+    {
+      "id": "vtex:supermaxi.com",
+      "ok": false,
+      "error": "HTTP 404"
+    },
+    {
+      "id": "vtex:tia.com.ec",
+      "ok": false,
+      "error": "Unexpected token '<', \" <!doctype \"... is not valid JSON"
+    },
+    {
+      "id": "wordpress:supermaxi.com",
+      "ok": false,
+      "error": "HTTP 401"
+    }
+  ]
+}
