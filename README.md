@@ -12,7 +12,7 @@ Compara el precio real de productos por 100 g/ml y lleva tus listas de compra co
 
 ## 🚀 En Producción
 
-**Live**: https://franciscombp.github.io/quanto/
+**Live**: https://franciscombp.github.io/compras/
 
 Actualiza automáticamente en GitHub Pages cada vez que hagas `git push origin main`.
 

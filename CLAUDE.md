@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Quanto** is a progressive web app (PWA) for comparing product prices per 100g/ml and managing shopping lists with price memory. The entire app runs locally in the browser—no backend required until API integration is needed.
 
-- **Live**: https://franciscombp.github.io/quanto/
+- **Live**: https://franciscombp.github.io/compras/
 - **Architecture**: HTML + vanilla JavaScript + localStorage (no build, no dependencies)
 - **Design system**: Red color scheme (#c41e1e) inspired by Supermaxi/Comisariato supermarkets
 - **Offline**: Service Worker with network-first caching strategy

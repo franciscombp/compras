@@ -2,8 +2,8 @@
   "name": "Quanto — Precio justo, sin trucos",
   "short_name": "Quanto",
   "description": "Compara el precio real de productos por 100 g/ml y lleva tus listas con memoria de precios",
-  "start_url": "/quanto/",
-  "scope": "/quanto/",
+  "start_url": "/compras/",
+  "scope": "/compras/",
   "display": "standalone",
   "orientation": "portrait",
   "theme_color": "#166a4a",
@@ -36,7 +36,7 @@
       "name": "Comparar precios",
       "short_name": "Comparar",
       "description": "Abre el comparador de precios",
-      "url": "/quanto/?view=comparar",
+      "url": "/compras/?view=comparar",
       "icons": [
         {
           "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect fill='%23166a4a' width='96' height='96' rx='20'/><path fill='%23fff' d='M48 20L32 30v14h-8c-3 0-6 3-6 6v18c0 3 3 6 6 6h8v14L48 76l16-10v-14h8c3 0 6-3 6-6V50c0-3-3-6-6-6h-8V34L48 20Z'/></svg>",

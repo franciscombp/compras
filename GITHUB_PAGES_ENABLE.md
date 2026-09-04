@@ -11,7 +11,7 @@ Sin esta configuración, el workflow no puede deployar aunque intente.
 ### 1️⃣ Ve a Settings de tu repositorio
 
 ```
-https://github.com/franciscombp/quanto/settings
+https://github.com/franciscombp/compras/settings
 ```
 
 ### 2️⃣ En el menú izquierdo, busca "Pages"
@@ -37,12 +37,12 @@ Luego **click en "Save"**
 - GitHub detecta que Pages está habilitado
 - El workflow automáticamente se ejecuta
 - En 30-60 segundos tu app está en vivo
-- La URL es: https://franciscombp.github.io/quanto/
+- La URL es: https://franciscombp.github.io/compras/
 
 ## 🔍 Verificar que funcionó
 
 1. Ve a Settings → Pages (arriba)
-2. Deberías ver un mensaje verde: ✅ "Your site is live at https://franciscombp.github.io/quanto/"
+2. Deberías ver un mensaje verde: ✅ "Your site is live at https://franciscombp.github.io/compras/"
 3. Abre esa URL en tu navegador
 4. Verás Quanto funcionando
 
@@ -53,7 +53,7 @@ Luego **click en "Save"**
 - [ ] Seleccioné rama "main" y folder "/"
 - [ ] Hice click en "Save"
 - [ ] Esperé 1 minuto
-- [ ] Visité https://franciscombp.github.io/quanto/
+- [ ] Visité https://franciscombp.github.io/compras/
 - [ ] Veo la app funcionando ✅
 
 ---

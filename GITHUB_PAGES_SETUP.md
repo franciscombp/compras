@@ -2,13 +2,13 @@
 
 ## TL;DR
 
-1. Ve a https://github.com/franciscombp/quanto/settings/pages
+1. Ve a https://github.com/franciscombp/compras/settings/pages
 2. Source: `Deploy from a branch`
 3. Branch: `main`
 4. Folder: `/ (root)`
 5. Click Save
 6. Espera 1 minuto
-7. Tu app está en: https://franciscombp.github.io/quanto/ ✅
+7. Tu app está en: https://franciscombp.github.io/compras/ ✅
 
 ---
 
@@ -16,7 +16,7 @@
 
 ### Paso 1: Abre Settings
 
-En https://github.com/franciscombp/quanto:
+En https://github.com/franciscombp/compras:
 - Click en ⚙️ **Settings** (arriba a la derecha)
 
 ### Paso 2: Ve a Pages
@@ -44,7 +44,7 @@ Click en **Save** (si aparece)
 GitHub automáticamente:
 
 1. **Detecta cambios** en la rama `main`
-2. **Publica en 30-60 segundos** a: https://franciscombp.github.io/quanto/
+2. **Publica en 30-60 segundos** a: https://franciscombp.github.io/compras/
 3. **Vuelve a hacer esto** cada vez que hagas `git push origin main`
 
 ---
@@ -55,12 +55,12 @@ GitHub automáticamente:
 
 En Settings → Pages, deberías ver:
 ```
-✅ Your site is live at https://franciscombp.github.io/quanto/
+✅ Your site is live at https://franciscombp.github.io/compras/
 ```
 
 ### 2. Abre la app
 
-Visita: https://franciscombp.github.io/quanto/
+Visita: https://franciscombp.github.io/compras/
 
 Deberías ver:
 - ✅ Pantalla de inicio con "Quanto"
@@ -104,7 +104,7 @@ git push origin main
 ### "No aparece en https://franciscombp.github.io/"
 
 Eso es normal. GitHub Pages **no lista** los repos públicamente. Solo funciona:
-- https://franciscombp.github.io/quanto/ ✅
+- https://franciscombp.github.io/compras/ ✅
 - https://franciscombp.github.io/ (si tienes un repo llamado `franciscombp.github.io`)
 
 ### "Source sigue diciendo 'None'"
@@ -133,7 +133,7 @@ git commit -m "Agregar botón X"
 git push origin main
 
 # 4. GitHub Pages actualiza automáticamente (~1 min)
-# Visita https://franciscombp.github.io/quanto/
+# Visita https://franciscombp.github.io/compras/
 # Verás tu cambio en vivo ✨
 ```
 

@@ -4,7 +4,7 @@
 
 La app está lista para ser publicada automáticamente en:
 ```
-https://franciscombp.github.io/quanto/
+https://franciscombp.github.io/compras/
 ```
 
 ## Configurar GitHub Pages (una sola vez)
@@ -12,7 +12,7 @@ https://franciscombp.github.io/quanto/
 ### 1. En GitHub.com, ve a tu repositorio
 
 ```
-https://github.com/franciscombp/quanto
+https://github.com/franciscombp/compras
 ```
 
 ### 2. Settings → Pages
@@ -30,7 +30,7 @@ https://github.com/franciscombp/quanto
 
 GitHub automáticamente:
 - ✅ Detecta cambios en `main`
-- ✅ Publica la app en `https://franciscombp.github.io/quanto/`
+- ✅ Publica la app en `https://franciscombp.github.io/compras/`
 - ✅ Actualiza cada vez que hagas `git push origin main`
 
 ---
@@ -64,7 +64,7 @@ git commit -m "Mejorar parser OCR
 git push origin main
 
 # 4. GitHub Pages se actualiza en ~1 minuto
-# Visita: https://franciscombp.github.io/quanto/
+# Visita: https://franciscombp.github.io/compras/
 ```
 
 ---
@@ -126,7 +126,7 @@ No uses `reset --hard` en `main` (destruye historial).
 
 ### Verificar que se publicó
 
-1. Abre tu app: https://franciscombp.github.io/quanto/
+1. Abre tu app: https://franciscombp.github.io/compras/
 2. Abre DevTools (F12)
 3. Ve a **Application** → **Service Workers**
 4. Verifica que hay un SW registrado
@@ -141,8 +141,8 @@ En GitHub.com:
 
 ## Estructura de URLs
 
-La app detecta automáticamente el path base (`/quanto/`) gracias a:
-- `manifest.json`: `"start_url": "/quanto/"`
+La app detecta automáticamente el path base (`/compras/`) gracias a:
+- `manifest.json`: `"start_url": "/compras/"`
 - `assets/sw.js`: usa `self.location` para detectar scope
 - Funciona igual en `http://localhost:8000/` y en GitHub Pages
 
@@ -159,7 +159,7 @@ La app detecta automáticamente el path base (`/quanto/`) gracias a:
 
 ### "No se carga la app"
 
-1. Ve a https://github.com/franciscombp/quanto/settings/pages
+1. Ve a https://github.com/franciscombp/compras/settings/pages
 2. Verifica que Source sea `main` / `root`
 3. Busca errores en el build (GitHub muestra un ❌ si falla)
 
