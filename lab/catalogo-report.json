@@ -1,5 +1,5 @@
 {
-  "corrida": "2026-10-05T17:58:20.194Z",
+  "corrida": "2026-10-12T18:39:35.237Z",
   "fuentes": [
     {
       "id": "openfoodfacts-ec",
@@ -24,7 +24,7 @@
     {
       "id": "wordpress:supermaxi.com",
       "ok": false,
-      "error": "HTTP 401"
+      "error": "HTTP 403"
     }
   ]
 }
