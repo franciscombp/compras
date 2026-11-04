@@ -8,6 +8,9 @@ on:
 
 permissions:
   contents: write
+  # Los commits que hace el bot con GITHUB_TOKEN no disparan la publicación de Pages (que sale
+  # «desde la rama»): sin este permiso y el paso de abajo, el catálogo nuevo nunca llegaba al sitio.
+  pages: write
 
 jobs:
   actualizar:
@@ -35,4 +38,12 @@ jobs:
           else
             git commit -m "Actualización semanal del catálogo de productos"
             git push
+            echo "publicar=si" >> "$GITHUB_OUTPUT"
           fi
+        id: commit
+
+      - name: Publicar en Pages
+        if: steps.commit.outputs.publicar == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST "repos/${{ github.repository }}/pages/builds"
