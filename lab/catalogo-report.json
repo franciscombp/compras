@@ -1,5 +1,5 @@
 {
-  "corrida": "2026-11-02T19:13:24.661Z",
+  "corrida": "2026-11-09T19:31:36.728Z",
   "fuentes": [
     {
       "id": "openfoodfacts-ec",
@@ -14,7 +14,7 @@
     {
       "id": "vtex:supermaxi.com",
       "ok": false,
-      "error": "The operation was aborted due to timeout"
+      "error": "HTTP 404"
     },
     {
       "id": "vtex:tia.com.ec",
