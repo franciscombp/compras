@@ -5,6 +5,6 @@ import Capacitor
 /// con el plugin nativo de lectura de etiquetas registrado en el puente.
 class MainViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
-        bridge?.registerPluginInstance(VisionLectorPlugin())
+        bridge?.registerPluginInstance(QuantoNativoPlugin())
     }
 }

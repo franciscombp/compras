@@ -916,3 +916,19 @@ button { font: inherit; color: inherit; }
 .scan-card .sc-precio { font-size: 16px; font-weight: 700; margin-top: 8px; }
 .scan-card .sc-meta { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; }
 .sc-flag { position: absolute; top: 16px; left: 16px; z-index: 1; box-shadow: var(--shadow-1); }
+
+/* ---- Apple Intelligence / lector nativo ---- */
+.ia-nota {
+  margin: 12px 0 0; padding: 10px 12px; border-radius: 12px;
+  background: color-mix(in oklab, var(--surface) 70%, transparent);
+  border: 1px solid color-mix(in oklab, var(--brand) 18%, transparent);
+  font-size: 13.5px; line-height: 1.45; color: var(--ink-2);
+}
+.ia-nota strong { color: var(--ink); }
+
+/* Dentro de la app nativa: sin selección accidental ni rebote de scroll. */
+html.nativo { overscroll-behavior-y: none; }
+html.nativo button, html.nativo .nav-item, html.nativo .scan-card, html.nativo .list-row {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+html.nativo #lectorConfig { pointer-events: none; color: var(--ink-3); }

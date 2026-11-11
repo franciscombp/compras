@@ -11,9 +11,10 @@
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
+		53A742E12CE475FD52316B2A /* QuantoNativoPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CB91B8921CF4A8841720AF3 /* QuantoNativoPlugin.swift */; };
+		0907DA79ACECF4F0722BF255 /* LectorEtiqueta.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17212BD4E208E6FB4316A58A /* LectorEtiqueta.swift */; };
+		D2A6FF5B8DC4671AAF4D8D9C /* AppleIA.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0570D45DCD7E70944F372C7 /* AppleIA.swift */; };
 		71840830C87800EA71282007 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBCDDF1670B3F865DAC32E5A /* MainViewController.swift */; };
-		8B3F5BA600A4C7FDAA6F42F1 /* VisionLectorPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ABE028CBF0DB8C59FB4B064 /* VisionLectorPlugin.swift */; };
-		FAF9AFB895EACC57B1F56B8B /* EtiquetaIA.swift in Sources */ = {isa = PBXBuildFile; fileRef = C37E7A804EB164718E9ADEDD /* EtiquetaIA.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
@@ -26,9 +27,10 @@
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		0CB91B8921CF4A8841720AF3 /* QuantoNativoPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuantoNativoPlugin.swift; sourceTree = "<group>"; };
+		17212BD4E208E6FB4316A58A /* LectorEtiqueta.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LectorEtiqueta.swift; sourceTree = "<group>"; };
+		B0570D45DCD7E70944F372C7 /* AppleIA.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIA.swift; sourceTree = "<group>"; };
 		CBCDDF1670B3F865DAC32E5A /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
-		6ABE028CBF0DB8C59FB4B064 /* VisionLectorPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionLectorPlugin.swift; sourceTree = "<group>"; };
-		C37E7A804EB164718E9ADEDD /* EtiquetaIA.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EtiquetaIA.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -73,9 +75,10 @@
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				0CB91B8921CF4A8841720AF3 /* QuantoNativoPlugin.swift */,
+				17212BD4E208E6FB4316A58A /* LectorEtiqueta.swift */,
+				B0570D45DCD7E70944F372C7 /* AppleIA.swift */,
 				CBCDDF1670B3F865DAC32E5A /* MainViewController.swift */,
-				6ABE028CBF0DB8C59FB4B064 /* VisionLectorPlugin.swift */,
-				C37E7A804EB164718E9ADEDD /* EtiquetaIA.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -168,9 +171,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				53A742E12CE475FD52316B2A /* QuantoNativoPlugin.swift in Sources */,
+				0907DA79ACECF4F0722BF255 /* LectorEtiqueta.swift in Sources */,
+				D2A6FF5B8DC4671AAF4D8D9C /* AppleIA.swift in Sources */,
 				71840830C87800EA71282007 /* MainViewController.swift in Sources */,
-				8B3F5BA600A4C7FDAA6F42F1 /* VisionLectorPlugin.swift in Sources */,
-				FAF9AFB895EACC57B1F56B8B /* EtiquetaIA.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

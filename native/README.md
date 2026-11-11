@@ -1,14 +1,34 @@
 # Quanto nativo (Capacitor + Vision + Apple Intelligence)
 
-La misma web de Quanto empaquetada como app iOS. Lo único nativo es un
-plugin pequeño (`ios/App/App/VisionLectorPlugin.swift`) que lee la etiqueta
-con **Vision** (OCR de Apple, en el dispositivo, gratis) y, si el iPhone lo
-soporta, interpreta el texto con **Apple Intelligence** (framework Foundation
-Models, iOS 26+). Si no, usa el parser de `assets/ocr.js` sobre el texto de
-Vision. Nada sale del teléfono y no cuesta nada por lectura.
+La misma web de Quanto empaquetada como app iOS. Lo nativo es un plugin
+(`QuantoNativo`) que pone el iPhone al servicio de la app:
+
+| Capacidad | Framework | Dónde se usa |
+|---|---|---|
+| OCR de etiquetas con cajas por palabra | Vision | Comparar con cámara |
+| Código de barras (EAN/UPC) | Vision | Completa nombre y contenido desde Open Food Facts o el catálogo |
+| Interpretar la etiqueta (precio, contenido, pack, nombre) | Apple Intelligence (Foundation Models, iOS 26+) | Comparar con cámara |
+| Interpretar una frase dictada o escrita ("dos leches Vita de litro a 1.25") | Apple Intelligence | Agregar item a la lista |
+| Explicar el veredicto en lenguaje natural | Apple Intelligence | Comparador manual y cámara |
+| Vibración al capturar, pantalla encendida en la góndola | UIKit | Comparar con cámara |
+
+Si Apple Intelligence no está disponible, cada función cae a la lógica local
+(parser de `assets/ocr.js`, textos fijos). Nada sale del teléfono y no cuesta
+nada por lectura. El dictado usa el micrófono del teclado de iOS, así que no
+hace falta permiso de micrófono.
 
 Orden de lectores en la app (`leerDatosEtiqueta` en `assets/app.js`):
 nativo → lector IA remoto (`worker/`, si está configurado) → Tesseract.
+
+## Portar a web y Android
+
+Toda la web habla con el dispositivo a través de `data/nativo.js`, que expone
+`capacidades`, `leerEtiquetaNativa`, `interpretarProducto`,
+`explicarComparacion`, `haptico` y `mantenerPantalla`. En web esas funciones
+devuelven `null`/`false` y la app usa sus alternativas. Para Android basta con
+un plugin de Capacitor con el mismo nombre (`QuantoNativo`) y los mismos
+métodos, por ejemplo con ML Kit (texto y códigos de barras) y Gemini Nano o el
+Worker de `worker/` para interpretar.
 
 ## Requisitos en el Mac
 
@@ -40,9 +60,10 @@ Cada vez que cambies la web (`index.html`, `assets/`, `data/`), repite
 
 ## Cómo saber qué lector se usó
 
-En la pantalla *Comparar con cámara* el botón bajo la cámara dice
+En la pantalla *Comparar con cámara* el texto bajo la cámara dice
 `Lector: Vision nativo ✦` y, tras cada captura, el estado indica
-`Capturada (Apple Intelligence)` o `Capturada (Vision)`.
+`Capturada (Apple Intelligence)` o `Capturada (Vision)`. Las notas que
+empiezan con ✦ las escribió Apple Intelligence.
 
 ## Estructura
 
@@ -56,8 +77,9 @@ native/
     ├── CapApp-SPM/           # dependencias de Capacitor vía Swift Package Manager
     └── App/
         ├── MainViewController.swift   # registra el plugin en el puente de Capacitor
-        ├── VisionLectorPlugin.swift   # OCR con Vision + cajas por palabra
-        ├── EtiquetaIA.swift           # Foundation Models (iOS 26+), con fallback
+        ├── QuantoNativoPlugin.swift   # métodos expuestos a la web (window.Capacitor.Plugins.QuantoNativo)
+        ├── LectorEtiqueta.swift       # Vision: OCR con cajas por palabra + código de barras
+        ├── AppleIA.swift              # Foundation Models: etiqueta, producto dictado, veredicto
         ├── Info.plist                 # NSCameraUsageDescription
         └── Base.lproj/Main.storyboard # usa MainViewController
 ```
@@ -66,7 +88,11 @@ native/
 
 - El código Swift se escribió sin compilarlo (no hay Xcode en el entorno
   donde se generó). Si Xcode marca algo, lo más probable es un detalle de la
-  API de Foundation Models (`@Generable`, `@Guide`); Vision es API estable.
+  API de Foundation Models en `AppleIA.swift` (`@Generable`, `@Guide`,
+  `prewarm()`); Vision y Capacitor son API estable.
+- La web se probó en Chromium simulando el plugin: lectura con código de
+  barras, lectura con Apple Intelligence, explicación del veredicto, asistente
+  con frase interpretada, hápticos y pantalla activa.
 - El Service Worker se omite dentro de la app: WKWebView no lo soporta en el
   esquema `capacitor://` y no hace falta (la web va dentro del paquete).
 - Para pasar a producción: cambiar icono y splash en `Assets.xcassets`,

@@ -14,11 +14,14 @@ import {
   getListas, getListaActivaId, setListaActiva, crearLista, renombrarLista,
   duplicarLista, cerrarLista, getHistorialListasCerradas, eliminarItem,
 } from "../data/store.js";
-import { parseNumero, parseLectura, parseEtiqueta, extraerPistas, preprocesarEtiqueta } from "./ocr.js";
-import { services, getLectorConfig, setLectorConfig, lectorDisponible, canvasABase64 } from "../data/api.js";
+import { parseNumero, parseLectura, parseEtiqueta, extraerPistas, extraerMedidaDeNombre, preprocesarEtiqueta } from "./ocr.js";
+import { services, getLectorConfig, setLectorConfig, lectorDisponible } from "../data/api.js";
+import { esNativo, capacidades, leerEtiquetaNativa, interpretarProducto, explicarComparacion, haptico, mantenerPantalla } from "../data/nativo.js";
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
+
+if (esNativo()) document.documentElement.classList.add("nativo");
 
 const state = {
   view: "home",
@@ -490,6 +493,7 @@ function renderResultadosComparacion() {
     </div>`;
 
   if (winnerNuevo && !reducedMotion.matches) countUp($("#winnerPriceValue"), mejor.normalizado);
+  explicarVeredicto(norm, $(".result-winner", box));
 
   $("#addWinnerToList")?.addEventListener("click", (ev) => {
     const btn = ev.currentTarget;
@@ -550,6 +554,7 @@ let autoCooldownHasta = 0;
 function detenerCamara() {
   clearTimeout(autoTimer);
   autoTimer = null;
+  mantenerPantalla(false);
   if (camaraStream) {
     camaraStream.getTracks().forEach((t) => t.stop());
     camaraStream = null;
@@ -596,13 +601,6 @@ async function leerEtiqueta(canvas) {
 
 let avisoLectorIA = 0;
 
-/** Plugin nativo (native/: Capacitor + Vision + Apple Intelligence), si la app corre empaquetada. */
-function pluginVision() {
-  const C = window.Capacitor;
-  if (!C?.isNativePlatform?.()) return null;
-  return C.Plugins?.VisionLector || null;
-}
-
 const FUENTES_LECTURA = { apple: "Apple Intelligence", vision: "Vision", ia: "IA", ocr: "OCR" };
 
 /**
@@ -615,26 +613,25 @@ const FUENTES_LECTURA = { apple: "Apple Intelligence", vision: "Vision", ia: "IA
  * `rapido` evita la interpretación con Apple Intelligence (auto-escaneo).
  */
 async function leerDatosEtiqueta(canvas, { rapido = false } = {}) {
-  const nativo = pluginVision();
-  if (nativo) {
+  if (esNativo()) {
     try {
-      const r = await nativo.leer({ imagen: canvasABase64(canvas), ia: !rapido });
+      const r = await leerEtiquetaNativa(canvas, { rapido });
       const base = parseEtiqueta(r.texto || "", extraerPistas({ words: r.palabras || [] }));
+      let datos = base, fuente = "vision";
       if (r.ia && r.ia.precio) {
         const ia = r.ia;
         const conContenido = ia.contenido && ia.unidad;
-        return {
-          fuente: "apple",
-          datos: {
-            precio: ia.precio,
-            contenido: conContenido ? ia.contenido : base.contenido,
-            unidad: conContenido ? ia.unidad : base.unidad,
-            unidades: ia.unidades || base.unidades || 1,
-            nombre: ia.nombre || base.nombre,
-          },
+        fuente = "apple";
+        datos = {
+          precio: ia.precio,
+          contenido: conContenido ? ia.contenido : base.contenido,
+          unidad: conContenido ? ia.unidad : base.unidad,
+          unidades: ia.unidades || base.unidades || 1,
+          nombre: ia.nombre || base.nombre,
         };
       }
-      return { datos: base, fuente: "vision" };
+      if (r.codigo && !rapido) datos = await completarPorCodigo(datos, r.codigo);
+      return { datos, fuente };
     } catch (e) {
       if (Date.now() - avisoLectorIA > 60000) {
         avisoLectorIA = Date.now();
@@ -656,6 +653,26 @@ async function leerDatosEtiqueta(canvas, { rapido = false } = {}) {
   }
   const lectura = await leerEtiqueta(canvas);
   return { datos: parseLectura(lectura.data), fuente: "ocr", confianzaOcr: lectura.confianza };
+}
+
+const porCodigo = new Map();
+/**
+ * Si la foto traía código de barras, completa nombre y contenido desde
+ * Open Food Facts o el catálogo local. El precio siempre es el de la etiqueta.
+ */
+async function completarPorCodigo(datos, codigo) {
+  if (datos.nombre && datos.contenido) return datos;
+  if (!porCodigo.has(codigo)) porCodigo.set(codigo, services.searchByBarcode(codigo).catch(() => null));
+  const p = await porCodigo.get(codigo);
+  if (!p) return datos;
+  const out = { ...datos };
+  const nombre = [p.nombre, p.marca && !String(p.nombre || "").toLowerCase().includes(String(p.marca).toLowerCase()) ? p.marca : ""].filter(Boolean).join(" ").trim();
+  if (nombre && (!out.nombre || out.nombre.length < 4)) out.nombre = nombre;
+  if (!out.contenido) {
+    const m = p.contenido && p.unidad ? { contenido: p.contenido, unidad: p.unidad, unidades: 1 } : extraerMedidaDeNombre(p.cantidadTexto || p.nombre || "");
+    if (m.contenido) { out.contenido = m.contenido; out.unidad = m.unidad; if (m.unidades > 1 && out.unidades === 1) out.unidades = m.unidades; }
+  }
+  return out;
 }
 
 const MENSAJES_LECTOR = {
@@ -788,7 +805,8 @@ async function iniciarEscaneo() {
     await video.play().catch(() => {});
     setScanStatus("Encuadra el precio y captura - puedes tomar varias seguidas.");
     $("#scanCapture").disabled = false;
-    getOcrWorker().catch(() => {}); // precalienta el OCR para la primera captura
+    mantenerPantalla(true);
+    if (!esNativo()) getOcrWorker().catch(() => {}); // precalienta Tesseract; en nativo lee Vision
   } catch (err) {
     detenerCamara();
     renderProblemaCamara(PROBLEMAS_CAMARA[err.name] ? err.name : "generico");
@@ -802,7 +820,7 @@ async function iniciarEscaneo() {
 function refrescarBotonLectorIA() {
   const b = $("#lectorConfig");
   if (!b) return;
-  if (pluginVision()) b.textContent = "Lector: Vision nativo ✦";
+  if (esNativo()) b.textContent = "Lector: Vision nativo ✦";
   else b.textContent = getLectorConfig().url ? "Lector IA: activado ✦" : "Lector IA: configurar";
 }
 
@@ -845,7 +863,7 @@ async function capturarEtiqueta() {
   if (!canvas) return;
   flashCamara();
   if (btn) btn.disabled = true;
-  setScanStatus(pluginVision() ? "Leyendo etiqueta con Vision…" : lectorDisponible() ? "Leyendo etiqueta con IA…" : "Leyendo etiqueta…");
+  setScanStatus(esNativo() ? "Leyendo etiqueta con Vision…" : lectorDisponible() ? "Leyendo etiqueta con IA…" : "Leyendo etiqueta…");
   try {
     const { datos, fuente } = await leerDatosEtiqueta(canvas);
     if (datos.precio === null && datos.contenido === null) {
@@ -853,6 +871,7 @@ async function capturarEtiqueta() {
       return;
     }
     const cap = agregarCaptura(datos, canvas);
+    haptico("exito");
     const sello = fuente === "ocr" ? "" : ` (${FUENTES_LECTURA[fuente]})`;
     setScanStatus(`Capturada${sello}: ${fmt(cap.precio)}${cap.contenido ? ` · ${cap.contenido} ${cap.unidad}` : ""} - lista para la siguiente.`);
   } catch (e) {
@@ -912,7 +931,7 @@ async function cicloAuto() {
     const canvas = capturarFrame();
     if (!canvas) return;
     const t0 = performance.now();
-    const nativo = Boolean(pluginVision());
+    const nativo = esNativo();
     let datos, confianza;
     if (nativo) {
       ({ datos } = await leerDatosEtiqueta(canvas, { rapido: true }));
@@ -950,6 +969,7 @@ async function cicloAuto() {
         if ((fuente === "ia" || fuente === "apple") && mejores.precio !== null) finales = mejores;
       }
       const cap = agregarCaptura(finales, canvas);
+      haptico("exito");
       setScanStatus(`Auto: capturada ${fmt(cap.precio)} ✓ - apunta a la siguiente etiqueta.`);
       autoCooldownHasta = Date.now() + 3000;
       autoFirmaPrevia = null;
@@ -975,6 +995,32 @@ function capturaNormalizada(cap, idx) {
     unidad: cap.unidad,
     unidades: cap.unidades || 1,
   }, idx);
+}
+
+/**
+ * Pide a Apple Intelligence una explicación corta del veredicto y la inserta
+ * bajo el ganador. Se espera a que la comparación deje de cambiar (el
+ * comparador re-renderiza en cada tecla) y la respuesta se cachea por resumen.
+ */
+let explicacionTimer = null;
+function explicarVeredicto(norm, contenedor) {
+  if (!contenedor || !esNativo()) return;
+  const resumen = norm.map((r, i) =>
+    `${i + 1}. ${r.etiqueta}: ${fmt(r.precio)}${r.unidades > 1 ? ` por ${r.unidades} envases` : ""}, ${r.totalContenido} ${r.unidad === "unidad" ? "unidades" : r.unidad} en total, ${fmt(r.normalizado)} ${r.baseLabel}`
+  ).join("\n");
+  clearTimeout(explicacionTimer);
+  explicacionTimer = setTimeout(async () => {
+    const caps = await capacidades();
+    if (!caps.appleIntelligence) return;
+    const nota = document.createElement("p");
+    nota.className = "ia-nota";
+    nota.textContent = "✦ Pensando…";
+    contenedor.appendChild(nota);
+    const r = await explicarComparacion(resumen);
+    if (!document.body.contains(nota)) return;
+    if (!r) { nota.remove(); return; }
+    nota.innerHTML = `✦ ${r.titulo ? `<strong>${esc(r.titulo)}</strong> ` : ""}${esc(r.explicacion)}`;
+  }, 700);
 }
 
 function veredictoEscaner() {
@@ -1037,6 +1083,8 @@ function renderScanTray() {
     ${mejorPendiente ? `<button class="btn btn-block" id="scanAddBest">${icon("plus")} La mejor al carrito · ${fmt(ver.mejor.cap.precio)}</button>` : ""}
     ${caps.length >= 2 ? `<button class="btn btn-ghost btn-block" id="scanOpenManual">Ajustar en comparador manual</button>` : ""}
     ${caps.length ? `<button class="btn btn-quiet" id="scanFinish">${caps.some((c) => c.agregadaComo) ? "Terminar" : "Terminar sin agregar"}</button>` : ""}`;
+
+  if (ver) explicarVeredicto([ver.mejor, ...ver.resto], $(".result-winner", tray));
 
   $$("[data-cap]", tray).forEach((el) => el.addEventListener("click", () => {
     const cap = caps.find((c) => c.id === el.dataset.cap);
@@ -1401,8 +1449,52 @@ function openAddItemSheet(prefill = {}) {
     // Update buttons
     const btnNext = sheetContent.querySelector("#wizardSiguiente");
     const btnPrev = sheetContent.querySelector("#wizardAnterior");
-    if (btnNext) btnNext.disabled = !valid;
+    if (btnNext) { btnNext.disabled = !valid; btnNext.textContent = paso === 4 ? "Agregar a la lista" : "Siguiente"; }
     if (btnPrev) btnPrev.style.display = paso === 0 ? "none" : "block";
+
+    if (paso === 4) {
+      const resumen = sheetContent.querySelector(".wizard-summary");
+      if (resumen) resumen.innerHTML = `
+        <div class="wizard-summary-row"><strong>Producto</strong><span class="value">${esc(d.nombre)}</span></div>
+        <div class="wizard-summary-row"><strong>Precio</strong><span class="value">${fmt(d.precio)}</span></div>
+        <div class="wizard-summary-row"><strong>Cantidad</strong><span class="value">${d.cantidad} unid.</span></div>
+        ${d.contenido ? `<div class="wizard-summary-row"><strong>Contenido</strong><span class="value">${d.contenido} ${d.unidad_medida}</span></div>` : ""}
+        ${d.contenido && d.precio ? `<div class="wizard-summary-row"><strong>Por ${d.unidad_medida === "unidad" ? "unidad" : `100 ${d.unidad_medida}`}</strong><span class="value tabular">${fmt(d.unidad_medida === "unidad" ? d.precio / d.contenido : (d.precio / d.contenido) * 100)}</span></div>` : ""}`;
+    }
+  };
+
+  /**
+   * Al salir del nombre, Apple Intelligence (si existe) interpreta la frase
+   * completa ("dos leches Vita de litro a 1.25") y rellena los demás pasos.
+   * Solo completa lo que la persona no haya escrito ya.
+   */
+  let interpretando = false;
+  const salirDelNombre = async () => {
+    if (interpretando) return;
+    const frase = wizard.datos.nombre.trim();
+    const caps = await capacidades();
+    const conNumeros = /\d|\b(un[oa]?|dos|tres|cuatro|cinco|seis|media|medio|litro|kilo|gramos?|centavos?)\b/i.test(frase);
+    if (!caps.appleIntelligence || !conNumeros) { avanzar(); return; }
+    interpretando = true;
+    const btn = sheetContent.querySelector("#wizardSiguiente");
+    const estado = sheetContent.querySelector("#wzVozEstado");
+    if (btn) { btn.disabled = true; btn.textContent = "Interpretando ✦"; }
+    const p = await interpretarProducto(frase);
+    interpretando = false;
+    if (btn) btn.textContent = "Siguiente";
+    if (p) {
+      const d = wizard.datos;
+      d.nombre = p.nombre || d.nombre;
+      if (p.precio && !(prefill.precio > 0)) d.precio = p.precio;
+      if (p.cantidad > 1 && d.cantidad === 1) d.cantidad = p.cantidad;
+      if (p.contenido && !d.contenido) { d.contenido = p.contenido; d.unidad_medida = p.unidad || d.unidad_medida; }
+      const set = (id, v) => { const el = sheetContent.querySelector(id); if (el && v !== null && v !== undefined) el.value = v; };
+      set("#wzNombre", d.nombre); set("#wzPrecio", d.precio); set("#wzCantidad", d.cantidad); set("#wzContenido", d.contenido); set("#wzUnidad", d.unidad_medida);
+      const partes = [p.precio ? fmt(p.precio) : null, p.cantidad > 1 ? `${p.cantidad} unid.` : null, p.contenido ? `${p.contenido} ${p.unidad}` : null].filter(Boolean);
+      if (estado && partes.length) estado.textContent = `✦ Apple Intelligence entendió: ${d.nombre} · ${partes.join(" · ")}. Revisa y sigue.`;
+      haptico("toque");
+    }
+    avanzar();
   };
 
   const avanzar = () => {
@@ -1462,7 +1554,7 @@ function openAddItemSheet(prefill = {}) {
                 placeholder="Ej. Leche entera 1L"
                 maxlength="50"
                 autocomplete="off">
-              <div class="wizard-hint">Sé específico: marca, volumen, tipo</div>
+              <div class="wizard-hint">${esNativo() ? "Dicta con el micrófono del teclado todo junto: \"dos leches Vita de litro a 1.25\"" : "Sé específico: marca, volumen, tipo"}</div>
             </div>
             <p class="micro" id="wzVozEstado" style="margin-top:12px"></p>
           </div>
@@ -1594,7 +1686,7 @@ function openAddItemSheet(prefill = {}) {
   // Cada cambio revalida el paso: sin esto "Siguiente" se queda bloqueado.
   if (inNombre) {
     inNombre.addEventListener("input", (e) => { wizard.datos.nombre = e.target.value; renderStep(); });
-    inNombre.addEventListener("keypress", (e) => { if (e.key === "Enter" && wizard.datos.nombre.trim().length >= 2) avanzar(); });
+    inNombre.addEventListener("keypress", (e) => { if (e.key === "Enter" && wizard.datos.nombre.trim().length >= 2) salirDelNombre(); });
   }
   if (inPrecio) {
     inPrecio.addEventListener("input", (e) => { wizard.datos.precio = e.target.value ? parseNumero(e.target.value) : null; renderStep(); });
@@ -1617,7 +1709,7 @@ function openAddItemSheet(prefill = {}) {
   if (inUnidad) inUnidad.addEventListener("change", (e) => { wizard.datos.unidad_medida = e.target.value; });
 
   if (btnAnt) btnAnt.addEventListener("click", retroceder);
-  if (btnSig) btnSig.addEventListener("click", () => { wizard.step === 4 ? guardar() : avanzar(); });
+  if (btnSig) btnSig.addEventListener("click", () => { wizard.step === 4 ? guardar() : wizard.step === 0 ? salirDelNombre() : avanzar(); });
 
   renderStep();
   setTimeout(() => inNombre?.focus(), 50);

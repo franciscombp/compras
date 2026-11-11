@@ -61,7 +61,8 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   └── sw.js              # Service Worker (network-first caching)
 ├── data/
 │   ├── store.js           # Data layer: localStorage + sync queue
-│   ├── api.js             # searchProduct (local catalog) + searchByBarcode (Open Food Facts)
+│   ├── api.js             # searchProduct (local catalog) + searchByBarcode (Open Food Facts) + leerEtiqueta (Worker)
+│   ├── nativo.js          # Bridge to the native plugin (QuantoNativo); returns null/false on the web
 │   └── catalogo.json      # Product catalog: seed + weekly GitHub Action updates
 ├── lab/                   # Internal tools (NOT linked from the app)
 │   ├── etiquetas.html     # Label-testing page: upload photos, see OCR + parse results
@@ -72,7 +73,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   └── wrangler.toml      # ORIGENES_PERMITIDOS, MODELO; secrets: ANTHROPIC_API_KEY, LECTOR_TOKEN
 ├── native/                # Optional iOS wrapper: Capacitor + Vision + Apple Intelligence (see native/README.md)
 │   ├── scripts/build-web.mjs       # copies the PWA to native/dist (no Service Worker)
-│   └── ios/App/App/*.swift         # VisionLectorPlugin (OCR), EtiquetaIA (Foundation Models), MainViewController
+│   └── ios/App/App/*.swift         # QuantoNativoPlugin (bridge), LectorEtiqueta (Vision OCR + barcode), AppleIA (Foundation Models)
 ├── .github/workflows/
 │   └── actualizar-catalogo.yml  # Weekly cron (Mon 09:00 UTC) + manual dispatch
 └── docs/                  # Documentation
@@ -116,6 +117,11 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 - `leerEtiqueta(canvas)`: sends the label photo to the Worker in `worker/` and returns the same shape as `parseEtiqueta`. Config (URL + optional token) lives in localStorage via `getLectorConfig()` / `setLectorConfig()`; `lectorDisponible()` is true when a URL is set and the device is online
 - Stubs for phase 2: `compareOnline(productos)`, `syncData(items)`
 
+**5b. Native bridge** (`data/nativo.js`)
+- Single entry point to the device. `esNativo()`, `capacidades()` (cached: vision, codigoBarras, appleIntelligence, plataforma), `leerEtiquetaNativa(canvas, {rapido})`, `interpretarProducto(frase)`, `explicarComparacion(resumen)` (cached by text), `haptico(tipo)`, `mantenerPantalla(activo)`
+- On the web every function returns `null`/`false` and `app.js` falls back to local logic. Android would implement the same Capacitor plugin name and methods
+- `app.js` adds `html.nativo` at startup; `tokens.css` uses it for native-only tweaks. Anything written by Apple Intelligence is shown with a leading ✦ (`.ia-nota`)
+
 **6. Offline** (`assets/sw.js`)
 - Service Worker with network-first strategy
 - Cache version: bumped each time to invalidate old caches
@@ -141,16 +147,16 @@ Event delegation handles:
 
 1. User captures product label
 2. `leerDatosEtiqueta(canvas)` in `app.js` picks the reader:
-   - **Native** (only inside the Capacitor app, `window.Capacitor.Plugins.VisionLector`): Vision OCR returns text plus per-word boxes; if the device has Apple Intelligence the plugin also returns an `ia` interpretation (fuente `apple`), otherwise `parseEtiqueta` runs on the Vision text (fuente `vision`)
+   - **Native** (only inside the Capacitor app, via `data/nativo.js`): Vision OCR returns text plus per-word boxes and any barcode; if the device has Apple Intelligence the plugin also returns an `ia` interpretation (fuente `apple`), otherwise `parseEtiqueta` runs on the Vision text (fuente `vision`). With a barcode, `completarPorCodigo()` fills missing name/content from `searchByBarcode()` (price always comes from the label)
    - **Lector IA** (if configured in the "Lector IA" sheet on the camera screen and online): `services.leerEtiqueta()` posts the JPEG to the Cloudflare Worker, Claude returns structured JSON. Any failure falls back to the local path and shows one toast per minute at most.
    - **Local OCR**: Tesseract.js extracts text, then `parseEtiqueta` in `ocr.js` extracts price ("$3", "3.50", "3,50"), content (g, ml, units), pack count and a product name
 3. Auto mode detects a stable frame with the cheap reader (Vision when native, Tesseract otherwise), then confirms that single frame with Apple Intelligence or the Lector IA when available (one call per capture, not per cycle)
-4. Results show ranking
+4. Results show ranking; when native with Apple Intelligence, `explicarVeredicto()` appends a short natural-language explanation (`.ia-nota`) after the comparison settles (700 ms debounce, cached per summary)
 
 ### Listas (Shopping Lists)
 
 1. Create new list (with optional store name)
-2. Add items manually or from comparador
+2. Add items manually (5-step wizard in `openAddItemSheet`) or from comparador. In the wizard, leaving the name step with a phrase that contains numbers calls `interpretarProducto()` (Apple Intelligence) and prefills price, quantity and content; the summary step re-renders from `wizard.datos`
 3. Each item has state: `estimado` → `verificado_en_tienda` → `en_carrito` → `facturado`
 4. Close list when done shopping (records actual total paid)
 5. Items move to historial
