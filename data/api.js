@@ -65,7 +65,7 @@ export function lectorDisponible() {
 }
 
 /** Canvas -> JPEG base64 acotado (lado mayor 1280 px): suficiente para leer y barato en tokens. */
-function canvasABase64(canvas, ladoMax = 1280) {
+export function canvasABase64(canvas, ladoMax = 1280) {
   let fuente = canvas;
   const mayor = Math.max(canvas.width, canvas.height);
   if (mayor > ladoMax) {

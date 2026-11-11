@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development
 
-### Run locally
+### Run locally (web)
 
 ```bash
 # Python
@@ -24,6 +24,12 @@ npx http-server
 ```
 
 Then open `http://localhost:8000/`
+
+### Build the iOS app (Mac only)
+
+```bash
+cd native && npm install && npm run ios   # copies the web, syncs Capacitor, opens Xcode
+```
 
 ### Key development workflows
 
@@ -64,6 +70,9 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 ├── worker/                # Optional Cloudflare Worker: label reader with Claude (see worker/README.md)
 │   ├── src/index.js       # POST {imagen, tipo} -> {precio, contenido, unidad, unidades, nombre, confianza}
 │   └── wrangler.toml      # ORIGENES_PERMITIDOS, MODELO; secrets: ANTHROPIC_API_KEY, LECTOR_TOKEN
+├── native/                # Optional iOS wrapper: Capacitor + Vision + Apple Intelligence (see native/README.md)
+│   ├── scripts/build-web.mjs       # copies the PWA to native/dist (no Service Worker)
+│   └── ios/App/App/*.swift         # VisionLectorPlugin (OCR), EtiquetaIA (Foundation Models), MainViewController
 ├── .github/workflows/
 │   └── actualizar-catalogo.yml  # Weekly cron (Mon 09:00 UTC) + manual dispatch
 └── docs/                  # Documentation
@@ -132,9 +141,10 @@ Event delegation handles:
 
 1. User captures product label
 2. `leerDatosEtiqueta(canvas)` in `app.js` picks the reader:
+   - **Native** (only inside the Capacitor app, `window.Capacitor.Plugins.VisionLector`): Vision OCR returns text plus per-word boxes; if the device has Apple Intelligence the plugin also returns an `ia` interpretation (fuente `apple`), otherwise `parseEtiqueta` runs on the Vision text (fuente `vision`)
    - **Lector IA** (if configured in the "Lector IA" sheet on the camera screen and online): `services.leerEtiqueta()` posts the JPEG to the Cloudflare Worker, Claude returns structured JSON. Any failure falls back to the local path and shows one toast per minute at most.
    - **Local OCR**: Tesseract.js extracts text, then `parseEtiqueta` in `ocr.js` extracts price ("$3", "3.50", "3,50"), content (g, ml, units), pack count and a product name
-3. Auto mode always uses local OCR to detect a stable frame, then confirms that single frame with the Lector IA when available (one call per capture, not per cycle)
+3. Auto mode detects a stable frame with the cheap reader (Vision when native, Tesseract otherwise), then confirms that single frame with Apple Intelligence or the Lector IA when available (one call per capture, not per cycle)
 4. Results show ranking
 
 ### Listas (Shopping Lists)

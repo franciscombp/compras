@@ -14,8 +14,8 @@ import {
   getListas, getListaActivaId, setListaActiva, crearLista, renombrarLista,
   duplicarLista, cerrarLista, getHistorialListasCerradas, eliminarItem,
 } from "../data/store.js";
-import { parseNumero, parseLectura, preprocesarEtiqueta } from "./ocr.js";
-import { services, getLectorConfig, setLectorConfig, lectorDisponible } from "../data/api.js";
+import { parseNumero, parseLectura, parseEtiqueta, extraerPistas, preprocesarEtiqueta } from "./ocr.js";
+import { services, getLectorConfig, setLectorConfig, lectorDisponible, canvasABase64 } from "../data/api.js";
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -596,12 +596,52 @@ async function leerEtiqueta(canvas) {
 
 let avisoLectorIA = 0;
 
+/** Plugin nativo (native/: Capacitor + Vision + Apple Intelligence), si la app corre empaquetada. */
+function pluginVision() {
+  const C = window.Capacitor;
+  if (!C?.isNativePlatform?.()) return null;
+  return C.Plugins?.VisionLector || null;
+}
+
+const FUENTES_LECTURA = { apple: "Apple Intelligence", vision: "Vision", ia: "IA", ocr: "OCR" };
+
 /**
- * Lee la etiqueta con el lector IA (worker/) si está configurado y hay red;
- * si no, o si falla, usa el OCR local. Devuelve { datos, fuente } donde
- * fuente es "ia" u "ocr" y datos tiene la forma de parseEtiqueta.
+ * Lee la etiqueta con el mejor lector disponible, en este orden:
+ *  1. nativo (Vision para el texto; Apple Intelligence para interpretarlo si
+ *     el iPhone lo soporta, si no el parser local sobre el texto de Vision)
+ *  2. lector IA remoto (worker/) si está configurado y hay red
+ *  3. OCR local con Tesseract
+ * Devuelve { datos, fuente } con fuente "apple" | "vision" | "ia" | "ocr".
+ * `rapido` evita la interpretación con Apple Intelligence (auto-escaneo).
  */
-async function leerDatosEtiqueta(canvas) {
+async function leerDatosEtiqueta(canvas, { rapido = false } = {}) {
+  const nativo = pluginVision();
+  if (nativo) {
+    try {
+      const r = await nativo.leer({ imagen: canvasABase64(canvas), ia: !rapido });
+      const base = parseEtiqueta(r.texto || "", extraerPistas({ words: r.palabras || [] }));
+      if (r.ia && r.ia.precio) {
+        const ia = r.ia;
+        const conContenido = ia.contenido && ia.unidad;
+        return {
+          fuente: "apple",
+          datos: {
+            precio: ia.precio,
+            contenido: conContenido ? ia.contenido : base.contenido,
+            unidad: conContenido ? ia.unidad : base.unidad,
+            unidades: ia.unidades || base.unidades || 1,
+            nombre: ia.nombre || base.nombre,
+          },
+        };
+      }
+      return { datos: base, fuente: "vision" };
+    } catch (e) {
+      if (Date.now() - avisoLectorIA > 60000) {
+        avisoLectorIA = Date.now();
+        toast("El lector nativo falló; se usa otro lector.");
+      }
+    }
+  }
   if (lectorDisponible()) {
     try {
       const datos = await services.leerEtiqueta(canvas);
@@ -761,7 +801,9 @@ async function iniciarEscaneo() {
 
 function refrescarBotonLectorIA() {
   const b = $("#lectorConfig");
-  if (b) b.textContent = getLectorConfig().url ? "Lector IA: activado ✦" : "Lector IA: configurar";
+  if (!b) return;
+  if (pluginVision()) b.textContent = "Lector: Vision nativo ✦";
+  else b.textContent = getLectorConfig().url ? "Lector IA: activado ✦" : "Lector IA: configurar";
 }
 
 /**
@@ -803,7 +845,7 @@ async function capturarEtiqueta() {
   if (!canvas) return;
   flashCamara();
   if (btn) btn.disabled = true;
-  setScanStatus(lectorDisponible() ? "Leyendo etiqueta con IA…" : "Leyendo etiqueta…");
+  setScanStatus(pluginVision() ? "Leyendo etiqueta con Vision…" : lectorDisponible() ? "Leyendo etiqueta con IA…" : "Leyendo etiqueta…");
   try {
     const { datos, fuente } = await leerDatosEtiqueta(canvas);
     if (datos.precio === null && datos.contenido === null) {
@@ -811,7 +853,7 @@ async function capturarEtiqueta() {
       return;
     }
     const cap = agregarCaptura(datos, canvas);
-    const sello = fuente === "ia" ? " ✦" : "";
+    const sello = fuente === "ocr" ? "" : ` (${FUENTES_LECTURA[fuente]})`;
     setScanStatus(`Capturada${sello}: ${fmt(cap.precio)}${cap.contenido ? ` · ${cap.contenido} ${cap.unidad}` : ""} - lista para la siguiente.`);
   } catch (e) {
     setScanStatus("No se pudo cargar el lector (necesita conexión la primera vez). Reintenta.");
@@ -870,7 +912,16 @@ async function cicloAuto() {
     const canvas = capturarFrame();
     if (!canvas) return;
     const t0 = performance.now();
-    const lectura = await leerEtiqueta(canvas);
+    const nativo = Boolean(pluginVision());
+    let datos, confianza;
+    if (nativo) {
+      ({ datos } = await leerDatosEtiqueta(canvas, { rapido: true }));
+      confianza = 100;
+    } else {
+      const lectura = await leerEtiqueta(canvas);
+      datos = parseLectura(lectura.data);
+      confianza = lectura.confianza;
+    }
     const duracion = performance.now() - t0;
     if (duracion > 3500) {
       autoLentos++;
@@ -883,8 +934,7 @@ async function cicloAuto() {
       autoLentos = 0;
     }
     if (!scanSession.auto) return;
-    const datos = parseLectura(lectura.data);
-    if (datos.precio === null || lectura.confianza < 55) { autoFirmaPrevia = null; return; }
+    if (datos.precio === null || confianza < 55) { autoFirmaPrevia = null; return; }
     const firma = `${datos.precio}|${datos.contenido ?? ""}`;
     const yaCapturada = scanSession.capturas.some(
       (c) => c.precio === datos.precio && (c.contenido ?? null) === (datos.contenido ?? null)
@@ -894,10 +944,10 @@ async function cicloAuto() {
       // El OCR local detecta que la etiqueta está quieta; la lectura buena la
       // hace el lector IA cuando existe (una llamada por captura, no por ciclo).
       let finales = datos;
-      if (lectorDisponible()) {
-        setScanStatus("Auto: etiqueta estable, leyendo con IA…");
-        const { datos: ia, fuente } = await leerDatosEtiqueta(canvas);
-        if (fuente === "ia" && ia.precio !== null) finales = ia;
+      if (nativo || lectorDisponible()) {
+        setScanStatus(nativo ? "Auto: etiqueta estable, interpretando…" : "Auto: etiqueta estable, leyendo con IA…");
+        const { datos: mejores, fuente } = await leerDatosEtiqueta(canvas);
+        if ((fuente === "ia" || fuente === "apple") && mejores.precio !== null) finales = mejores;
       }
       const cap = agregarCaptura(finales, canvas);
       setScanStatus(`Auto: capturada ${fmt(cap.precio)} ✓ - apunta a la siguiente etiqueta.`);
