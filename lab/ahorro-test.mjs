@@ -13,7 +13,7 @@ globalThis.localStorage = {
 };
 const store = await import("../data/store.js");
 const ahorro = await import("../data/ahorro.js");
-const { crearLista, guardarProducto, verificarEnTienda, facturarItem, cerrarLista, actualizarLista, setPresupuesto, guardarComparacion, setAjustes, exportarDatos, importarDatos, getPrecios } = store;
+const { crearLista, guardarProducto, verificarEnTienda, facturarItem, cerrarLista, actualizarLista, setPresupuesto, guardarComparacion, setAjustes, exportarDatos, importarDatos, getPrecios, registrarPrecio } = store;
 const { claveProducto, estadisticasProducto, semaforoPrecio, productosFrecuentes, sugerenciasRecompra, comparativaTiendas, resumenAhorro, consejos, resumenParaCoach } = ahorro;
 
 let fallos = 0;
@@ -48,6 +48,11 @@ compra("2026-10-10", "Tía", [{ n: "Leche entera Vita 1 L", g: 1000, u: "ml", p:
 compra("2026-10-28", "Supermaxi", [{ n: "Leche entera Vita 1 L", g: 1000, u: "ml", p: 1.35 }, { n: "Arroz Gustadina 2 kg", g: 2000, u: "g", p: 2.80 }, { n: "Pan integral", p: 1.60 }, { n: "Yogur Toni 1 L", g: 1000, u: "ml", p: 2.10 }], { dif: 0.45 });
 compra("2026-11-03", "Supermaxi", [{ n: "Leche entera Vita 1 L", g: 1000, u: "ml", p: 1.35 }, { n: "Atún Real lomitos 170 g", g: 170, u: "g", p: 1.99 }, { n: "Pan integral", p: 1.60 }]);
 
+// Tercera y cuarta tienda: precios vistos sin compra cerrada (escaneo suelto).
+enFecha(ts("2026-10-20"), () => registrarPrecio({ nombre: "Leche entera Vita 1 L", precio: 1.22, contenido: 1000, unidad: "ml", tienda: "Coral", fuente: "escaner" }));
+enFecha(ts("2026-10-21"), () => registrarPrecio({ nombre: "Leche entera Vita 1 L", precio: 1.15, contenido: 1000, unidad: "ml", tienda: "Mi Comisariato", fuente: "escaner" }));
+enFecha(ts("2026-10-21"), () => registrarPrecio({ nombre: "Atún Real lomitos 170 g", precio: 1.95, contenido: 170, unidad: "g", tienda: "Mi Comisariato", fuente: "escaner" }));
+
 enFecha(ts("2026-10-15"), () => guardarComparacion({ origen: "comparador", items: [
   { nombre: "Atún lata suelta", precio: 1.20, totalContenido: 80, unidad: "g", normalizado: 1.5 },
   { nombre: "Atún pack ×6", precio: 6.00, totalContenido: 480, unidad: "g", normalizado: 1.25 },
@@ -68,14 +73,16 @@ ok(claveProducto("Atún Real lomitos 170 g") !== claveProducto("Atún Van Camps 
 
 // ---- memoria ----
 const leche = estadisticasProducto("Leche Vita 1 L", { ahora: AHORA });
-ok(leche && leche.n === 6 && leche.baseNormalizada, `leche: ${leche?.n} precios por 100 ml`);
-ok(leche.minimo.tienda === "Tía" && Math.abs(leche.minimo.valor - 0.119) < 1e-6, `mínimo de leche en ${leche.minimo.tienda} a $${leche.minimo.valor.toFixed(3)}/100 ml`);
-ok(leche.tiendas[0].tienda === "Tía" && leche.tiendas.length === 2, "tiendas ordenadas de barata a cara");
-ok(getPrecios().filter((p) => p.clave === leche.clave).length === 6, "verificar + facturar al mismo precio cuentan una sola vez");
+ok(leche && leche.n === 8 && leche.baseNormalizada, `leche: ${leche?.n} precios por 100 ml`);
+ok(leche.minimo.tienda === "Mi Comisariato" && Math.abs(leche.minimo.valor - 0.115) < 1e-6, `mínimo de leche en ${leche.minimo.tienda} a $${leche.minimo.valor.toFixed(3)}/100 ml`);
+ok(leche.tiendas.length === 4 && leche.tiendas.map((t) => t.tienda).join(" < ") === "Mi Comisariato < Tía < Coral < Supermaxi", `cuatro tiendas ordenadas: ${leche.tiendas.map((t) => `${t.tienda} $${t.mediana.toFixed(3)}`).join(" < ")}`);
+ok(getPrecios().filter((p) => p.clave === leche.clave).length === 8, "verificar + facturar al mismo precio cuentan una sola vez");
 
 // ---- semáforo ----
-const caro = semaforoPrecio({ nombre: "Atún Real lomitos 170 g", precio: 1.99, contenido: 170, unidad: "g" }, { ahora: AHORA });
-ok(caro.nivel === "caro" && /Tía/.test(caro.texto), `atún a $1.99 -> ${caro.nivel}: ${caro.texto}`);
+const casiCaro = semaforoPrecio({ nombre: "Atún Real lomitos 170 g", precio: 1.99, contenido: 170, unidad: "g" }, { ahora: AHORA });
+ok(casiCaro.nivel === "normal", `atún a $1.99 con habitual $1.89 -> ${casiCaro.nivel} (+5%, aún dentro del rango)`);
+const caro = semaforoPrecio({ nombre: "Atún Real lomitos 170 g", precio: 2.15, contenido: 170, unidad: "g" }, { ahora: AHORA });
+ok(caro.nivel === "caro" && /Tía/.test(caro.texto), `atún a $2.15 -> ${caro.nivel}: ${caro.texto}`);
 const bueno = semaforoPrecio({ nombre: "Atún Real 170 g", precio: 1.75, contenido: 170, unidad: "g" }, { ahora: AHORA });
 ok(bueno.nivel === "bueno", `atún a $1.75 -> ${bueno.nivel}: ${bueno.texto}`);
 const normal = semaforoPrecio({ nombre: "Atún Real 170 g", precio: 1.85, contenido: 170, unidad: "g" }, { ahora: AHORA });
@@ -95,7 +102,7 @@ ok(sug[0].precioRef === 5.10, `precio de referencia de la sugerencia: $${sug[0].
 
 // ---- tiendas ----
 const tiendas = comparativaTiendas({ ahora: AHORA });
-ok(tiendas[0]?.tienda === "Tía" && tiendas[0].gana === 2 && tiendas[0].compara === 2, `tienda ganadora: ${tiendas[0]?.tienda} ${tiendas[0]?.gana}/${tiendas[0]?.compara}`);
+ok(tiendas.length === 4 && tiendas[0]?.tienda === "Mi Comisariato" && tiendas[0].gana === 1 && tiendas[1]?.tienda === "Tía" && tiendas[1].gana === 1, `${tiendas.length} tiendas comparadas: ${tiendas.map((t) => `${t.tienda} ${t.gana}/${t.compara}`).join(" · ")}`);
 
 // ---- resumen ----
 const r = resumenAhorro({ ahora: AHORA });
@@ -108,8 +115,8 @@ ok(r.topGasto[0] && /leche|papel/i.test(r.topGasto[0].nombre) && r.topGasto[0].p
 // ---- consejos ----
 const cs = consejos({ ahora: AHORA, listaId: activa.id });
 const tipos = cs.map((c) => c.tipo);
-ok(tipos.includes("caro") && tipos.includes("tienda") && tipos.includes("recompra"), `consejos: ${tipos.join(", ")}`);
-ok(/Atún Real/.test(cs.find((c) => c.tipo === "caro").titulo) && /Tía.*12% menos/.test(cs.find((c) => c.tipo === "caro").texto), `consejo caro: ${cs.find((c) => c.tipo === "caro").texto}`);
+ok(tipos.includes("caro") && tipos.includes("recompra") && !tipos.includes("tienda"), `consejos: ${tipos.join(", ")} (sin "tienda": ninguna gana en 60% de lo comparado)`);
+ok(/Leche/.test(cs.find((c) => c.tipo === "caro").titulo) && /Mi Comisariato.*15% menos/.test(cs.find((c) => c.tipo === "caro").texto), `consejo caro: ${cs.find((c) => c.tipo === "caro").texto}`);
 ok(cs.find((c) => c.tipo === "recompra")?.accion?.agregar, "el consejo de recompra trae acción de agregar");
 ok(resumenParaCoach({ ahora: AHORA, listaId: activa.id }).split("\n").length >= 6, "resumen para el coach tiene varias líneas");
 
