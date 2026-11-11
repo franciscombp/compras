@@ -21,8 +21,8 @@ import {
 } from "../data/ahorro.js";
 import { parseNumero, parseLectura, parseEtiqueta, extraerPistas, extraerMedidaDeNombre, preprocesarEtiqueta } from "./ocr.js";
 import { services, getLectorConfig, setLectorConfig, lectorDisponible } from "../data/api.js";
-import { esNativo, capacidades, leerEtiquetaNativa, interpretarEtiqueta, interpretarProducto, explicarComparacion, redactarConsejo, haptico, mantenerPantalla, exportarRecordatorios, importarRecordatorios, compartir } from "../data/nativo.js";
-import { agruparEtiquetas, Seguimiento, mapearCaja, normalizadoDe } from "./vivo.js";
+import { esNativo, capacidades, leerEtiquetaNativa, interpretarEtiqueta, interpretarProducto, explicarComparacion, redactarConsejo, haptico, mantenerPantalla, exportarRecordatorios, importarRecordatorios, compartir, abrirBarridoNativo, cerrarBarridoNativo, actualizarEtiquetasNativas } from "../data/nativo.js";
+import { agruparEtiquetas, Seguimiento, mapearCaja, normalizadoDe, firmaDe } from "./vivo.js";
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -707,6 +707,7 @@ const barrido = {
   seguimiento: new Seguimiento({ confirmarTras: 2, olvidarMs: 1500 }),
   timer: null, ocupado: false, pausado: false, frame: null, cajas: [],
   lentos: 0, fallos: 0, nivelRapido: false, statusTimer: null,
+  nativoActivo: false, nativoVisitado: false,
 };
 
 function modoEscaneo() {
@@ -733,6 +734,8 @@ function detenerCamara() {
   autoTimer = null;
   clearTimeout(barrido.timer);
   barrido.timer = null;
+  if (barrido.nativoActivo) cerrarBarridoNativo();
+  barrido.nativoVisitado = false;
   mantenerPantalla(false);
   if (camaraStream) {
     camaraStream.getTracks().forEach((t) => t.stop());
@@ -964,15 +967,15 @@ async function iniciarEscaneo() {
   scanSession.auto = false;
   renderScanTray();
   refrescarBotonLectorIA();
-  const soporte = soporteCamara();
-  if (soporte !== "ok") { renderProblemaCamara(soporte); return; }
-
   const modo = modoEscaneo();
   const selectorModo = esNativo() ? `
       <div class="modo-switch" role="tablist" aria-label="Modo de escaneo">
         <button class="stage-chip ${modo === "barrido" ? "on" : ""}" role="tab" aria-selected="${modo === "barrido"}" data-modo="barrido">Barrido ✦</button>
         <button class="stage-chip ${modo === "captura" ? "on" : ""}" role="tab" aria-selected="${modo === "captura"}" data-modo="captura">Captura</button>
       </div>` : "";
+  if (modo === "barrido" && (await capacidades()).barridoNativo) { renderBarridoNativo(selectorModo); return; }
+  const soporte = soporteCamara();
+  if (soporte !== "ok") { renderProblemaCamara(soporte); return; }
   $("#scanStage").innerHTML = modo === "barrido" ? `
     <div class="camera-stage barrido">
       <video id="scanVideo" autoplay playsinline muted></video>
@@ -1018,6 +1021,98 @@ async function iniciarEscaneo() {
   $("#autoChip")?.addEventListener("click", () => setAuto(!scanSession.auto));
   $("#barridoPausa")?.addEventListener("click", () => setBarridoPausa(!barrido.pausado));
   $("#scanOverlay")?.addEventListener("pointerdown", tocarOverlay);
+}
+
+// ------------------------- Barrido con cámara nativa -------------------------
+// La cámara, Vision y el seguimiento corren en SwiftUI (native/ios/App/App/
+// Barrido*.swift). Aquí llega cada etiqueta confirmada: se parsea con el mismo
+// parser, entra en la bandeja y se devuelve al overlay el precio por 100 g.
+
+function renderBarridoNativo(selectorModo) {
+  $("#scanStage").innerHTML = `
+    <div class="card barrido-nativo">
+      <div class="stage-top" style="position:static; justify-content:flex-start; margin-bottom:12px">${selectorModo}</div>
+      <p class="title" style="font-size:16px">Barrido con la cámara nativa ✦</p>
+      <p class="caption" style="margin-top:6px">Se abre a pantalla completa. Pasea la cámara por el estante: cada etiqueta de precio se agrega sola, el ganador se marca en verde y vuelves aquí con todo listo para comparar.</p>
+      <button class="btn btn-block" id="abrirBarrido" style="margin-top:14px">${icon("camera")} Abrir cámara</button>
+      <p class="micro" id="scanStatus" aria-live="polite" style="margin-top:10px; text-align:center"></p>
+    </div>`;
+  $$("[data-modo]", $("#scanStage")).forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.modo !== modoEscaneo()) setModoEscaneo(b.dataset.modo);
+  }));
+  $("#abrirBarrido").addEventListener("click", lanzarBarridoNativo);
+  if (!barrido.nativoVisitado) { barrido.nativoVisitado = true; lanzarBarridoNativo(); }
+  else setScanStatus(scanSession.capturas.length ? `${scanSession.capturas.length} etiquetas en la bandeja.` : "");
+}
+
+async function lanzarBarridoNativo() {
+  if (barrido.nativoActivo) return;
+  barrido.nativoActivo = true;
+  setScanStatus("Abriendo la cámara…");
+  try {
+    const ok = await abrirBarridoNativo({
+      onEtiqueta: incorporarEtiquetaNativa,
+      onToque: ({ id } = {}) => {
+        const cap = scanSession.capturas.find((c) => c.nativoIds?.includes(id));
+        if (!cap) return;
+        cerrarBarridoNativo();
+        setTimeout(() => openCapturaSheet(cap), 350);
+      },
+      onCerrado: () => {
+        barrido.nativoActivo = false;
+        renderScanTray();
+        setScanStatus(scanSession.capturas.length ? `${scanSession.capturas.length} etiquetas en la bandeja · abre la cámara para seguir.` : "Abre la cámara para empezar.");
+      },
+    });
+    if (!ok) { barrido.nativoActivo = false; setScanStatus("La cámara nativa no está disponible aquí."); }
+  } catch (e) {
+    barrido.nativoActivo = false;
+    setScanStatus(e?.codigo === "sin_permiso" ? "Permite la cámara en Ajustes > Quanto." : "No se pudo abrir la cámara nativa.");
+  }
+}
+
+function incorporarEtiquetaNativa(e) {
+  const datos = parseEtiqueta(e?.texto || "", extraerPistas({ words: e?.palabras || [] }));
+  if (datos.precio === null && e?.precio > 0) datos.precio = e.precio;
+  if (datos.precio === null) return;
+  const firma = firmaDe(datos);
+  // La cámara puede volver a entregar la misma etiqueta con otro id (la firma
+  // nativa es más laxa que la de aquí): se conservan todos sus ids.
+  const repetida = scanSession.capturas.find((c) => c.firma === firma);
+  if (repetida) {
+    repetida.nativoIds = [...new Set([...(repetida.nativoIds || []), e.id])];
+    enviarChipsNativos();
+    return;
+  }
+  const cap = agregarCaptura(datos, e.miniatura || miniaturaVacia());
+  cap.firma = firma;
+  cap.texto = e.texto || "";
+  cap.fuente = "vision";
+  cap.nativoIds = [e.id];
+  enviarChipsNativos();
+  refinarConIA(cap);
+}
+
+/** Le dice al overlay nativo qué mostrar sobre cada etiqueta ya analizada. */
+function enviarChipsNativos() {
+  if (!barrido.nativoActivo) return;
+  const mejorFirma = veredictoEscaner()?.mejor.cap.firma;
+  actualizarEtiquetasNativas(scanSession.capturas.flatMap((c) => {
+    const norm = normalizadoDe(c);
+    const medida = c.unidad === "unidad" ? "u" : `100 ${c.unidad}`;
+    const chip = norm ? `${fmtNorm(norm)} / ${medida}` : `${fmt(c.precio)} · ¿gramaje?`;
+    const estado = c.firma === mejorFirma ? "mejor" : norm ? "ok" : "sinGramaje";
+    return (c.nativoIds || []).map((id) => ({ id, chip, estado }));
+  }));
+}
+
+function miniaturaVacia() {
+  const c = document.createElement("canvas");
+  c.width = 180; c.height = 62;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#1b1d1a";
+  ctx.fillRect(0, 0, c.width, c.height);
+  return c;
 }
 
 // ------------------------------ Barrido en vivo ------------------------------
@@ -1155,6 +1250,7 @@ async function refinarConIA(cap) {
   if (ia.unidades > 1 && (cap.unidades || 1) === 1) cap.unidades = ia.unidades;
   cap.fuente = "apple";
   renderScanTray();
+  enviarChipsNativos();
   if (modoEscaneo() === "barrido" && !barrido.statusTimer) setScanStatus(resumenBarrido(barrido.seguimiento.pistas));
 }
 
@@ -1309,7 +1405,7 @@ function agregarCaptura(datos, canvas) {
     contenido: datos.contenido,
     unidad: datos.unidad || "g",
     unidades: datos.unidades || 1,
-    thumb: miniatura(canvas),
+    thumb: typeof canvas === "string" ? canvas : miniatura(canvas),
     agregadaComo: null, // id del ItemLista si ya se agregó / marcó
   };
   scanSession.capturas.push(cap);

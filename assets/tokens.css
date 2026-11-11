@@ -1052,3 +1052,8 @@ html.nativo #lectorConfig { pointer-events: none; color: var(--ink-3); }
 .top-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 13.5px; padding: 6px 0; }
 .top-track { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
 .top-track span { display: block; height: 100%; background: var(--brand); }
+
+/* Barrido con cámara nativa: el selector de modo sobre tarjeta clara */
+.barrido-nativo .modo-switch { background: var(--surface-2); border-color: var(--line); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.barrido-nativo .stage-chip { color: var(--ink-2); }
+.barrido-nativo .stage-chip.on { background: var(--surface); color: var(--brand-deep); box-shadow: var(--shadow-1); }

@@ -18,6 +18,10 @@ import UIKit
 ///   exportarRecordatorios({ lista, items: [{ nombre, nota }] }) -> { creados, omitidos }
 ///   importarRecordatorios({ lista? })   -> { items: [{ nombre, nota, lista }] }
 ///   compartir({ texto, titulo })        -> { completado, actividad }
+///   abrirBarrido() / cerrarBarrido()    -> cámara nativa a pantalla completa (BarridoView)
+///   actualizarEtiquetas({ etiquetas: [{ id, chip, estado }] }) -> textos del overlay
+///   Eventos: barridoEtiqueta { id, texto, precio, lineas, palabras, caja, miniatura },
+///            barridoToque { id }, barridoCerrado { motivo }
 @objc(QuantoNativoPlugin)
 public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "QuantoNativoPlugin"
@@ -34,7 +38,13 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "exportarRecordatorios", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "importarRecordatorios", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "compartir", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "abrirBarrido", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cerrarBarrido", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "actualizarEtiquetas", returnType: CAPPluginReturnPromise),
     ]
+
+    private var barridoHost: BarridoHost?
+    private var barridoModelo: BarridoModelo?
 
     public override func load() {
         AppleIA.precalentar()
@@ -45,6 +55,7 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
             "vision": true,
             "codigoBarras": true,
             "barrido": true,
+            "barridoNativo": true,
             "recordatorios": true,
             "compartir": true,
             "appleIntelligence": AppleIA.disponible(),
@@ -218,6 +229,53 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
             } catch {
                 call.reject("recordatorios: \(error.localizedDescription)")
             }
+        }
+    }
+
+    // MARK: - Barrido nativo (SwiftUI + AVFoundation + Vision)
+
+    @objc func abrirBarrido(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let vc = self.bridge?.viewController else { call.reject("sin_vista"); return }
+            if self.barridoHost != nil { call.resolve(["yaAbierto": true]); return }
+            let modelo = BarridoModelo()
+            modelo.alConfirmar = { [weak self] datos in self?.notifyListeners("barridoEtiqueta", data: datos) }
+            modelo.alTocar = { [weak self] id in self?.notifyListeners("barridoToque", data: ["id": id]) }
+            modelo.alCerrar = { [weak self] in self?.cerrarBarridoInterno(motivo: "usuario") }
+            let host = BarridoHost(rootView: BarridoView(modelo: modelo))
+            host.modalPresentationStyle = .fullScreen
+            self.barridoHost = host
+            self.barridoModelo = modelo
+            vc.present(host, animated: true) { call.resolve(["yaAbierto": false]) }
+        }
+    }
+
+    @objc func cerrarBarrido(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            self.cerrarBarridoInterno(motivo: "web")
+            call.resolve()
+        }
+    }
+
+    private func cerrarBarridoInterno(motivo: String) {
+        guard let host = barridoHost else { return }
+        barridoModelo?.detener()
+        host.dismiss(animated: true)
+        barridoHost = nil
+        barridoModelo = nil
+        notifyListeners("barridoCerrado", data: ["motivo": motivo])
+    }
+
+    @objc func actualizarEtiquetas(_ call: CAPPluginCall) {
+        let lista = (call.getArray("etiquetas") as? [[String: Any]]) ?? []
+        var chips: [String: BarridoModelo.Chip] = [:]
+        for e in lista {
+            guard let id = e["id"] as? String, let chip = e["chip"] as? String else { continue }
+            chips[id] = BarridoModelo.Chip(texto: chip, estado: (e["estado"] as? String) ?? "ok")
+        }
+        DispatchQueue.main.async {
+            self.barridoModelo?.actualizarChips(chips)
+            call.resolve()
         }
     }
 

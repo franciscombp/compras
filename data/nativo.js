@@ -13,7 +13,7 @@
 import { canvasABase64 } from "./api.js";
 
 const SIN_CAPACIDADES = {
-  vision: false, codigoBarras: false, barrido: false, recordatorios: false,
+  vision: false, codigoBarras: false, barrido: false, barridoNativo: false, recordatorios: false,
   compartir: typeof navigator !== "undefined" && Boolean(navigator.share || navigator.clipboard),
   appleIntelligence: false, plataforma: "web",
 };
@@ -141,6 +141,51 @@ export async function redactarConsejo(resumen) {
   })();
   consejosIA.set(resumen, promesa);
   return promesa;
+}
+
+// ---------------------------------------------------------------------------
+// Barrido nativo: cámara SwiftUI a pantalla completa; el cerebro sigue aquí
+// ---------------------------------------------------------------------------
+
+let oyentesBarrido = [];
+
+async function soltarOyentesBarrido() {
+  const hs = oyentesBarrido;
+  oyentesBarrido = [];
+  for (const h of hs) { try { await h.remove(); } catch { /* ya quitado */ } }
+}
+
+/**
+ * Abre la cámara nativa. Callbacks:
+ *  - onEtiqueta({ id, texto, precio, lineas, palabras, caja, miniatura }) por etiqueta confirmada
+ *  - onToque({ id }) al tocar una etiqueta ya confirmada
+ *  - onCerrado({ motivo }) al cerrarse (por la persona o por la web)
+ * Devuelve false si no hay plugin; lanza Error con .codigo si no se pudo abrir.
+ */
+export async function abrirBarridoNativo({ onEtiqueta, onToque, onCerrado } = {}) {
+  const p = plugin();
+  if (!p) return false;
+  await soltarOyentesBarrido();
+  const alta = async (evento, cb) => { if (cb) oyentesBarrido.push(await p.addListener(evento, cb)); };
+  await alta("barridoEtiqueta", onEtiqueta);
+  await alta("barridoToque", onToque);
+  await alta("barridoCerrado", async (e) => { await soltarOyentesBarrido(); onCerrado?.(e || {}); });
+  try {
+    await p.abrirBarrido();
+    return true;
+  } catch (e) {
+    await soltarOyentesBarrido();
+    throw Object.assign(new Error(String(e?.message || e)), { codigo: /sin_permiso/.test(String(e?.message || e)) ? "sin_permiso" : "barrido" });
+  }
+}
+
+export async function cerrarBarridoNativo() {
+  try { await plugin()?.cerrarBarrido(); } catch { /* ya cerrado */ }
+}
+
+/** Textos y estado ("mejor" | "ok" | "sinGramaje") de cada etiqueta para el overlay nativo. */
+export function actualizarEtiquetasNativas(etiquetas) {
+  plugin()?.actualizarEtiquetas({ etiquetas }).catch(() => {});
 }
 
 /** Vibración corta: "exito" | "aviso" | "toque". En web no hace nada. */

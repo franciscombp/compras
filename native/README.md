@@ -5,7 +5,7 @@ La misma web de Quanto empaquetada como app iOS. Lo nativo es un plugin
 
 | Capacidad | Framework | Dónde se usa |
 |---|---|---|
-| **Barrido en vivo**: detecta todas las etiquetas del encuadre, las sigue y las agrega solas | Vision (OCR por fotograma) + `assets/vivo.js` | Comparar con cámara, modo por defecto |
+| **Barrido en vivo con cámara nativa**: SwiftUI + AVFoundation; Vision lee cada fotograma sin pasar por el WebView, overlay a 60 fps, linterna, enfoque por toque | `BarridoView`, `BarridoModelo`, `EtiquetasVivo` | Comparar con cámara, modo por defecto |
 | OCR de etiquetas con cajas por palabra y por línea | Vision | Comparar con cámara |
 | Código de barras (EAN/UPC) | Vision | Completa nombre y contenido desde Open Food Facts o el catálogo |
 | Interpretar la etiqueta (precio, contenido, pack, nombre) | Apple Intelligence (Foundation Models, iOS 26+) | Comparar con cámara |
@@ -26,22 +26,33 @@ nativo → lector IA remoto (`worker/`, si está configurado) → Tesseract.
 
 ## Barrido en vivo (cómo funciona)
 
-1. Cada ~100 ms la web manda a Vision el fotograma completo reducido a 1024 px
-   (`leerEtiqueta` con `ia: false`). Si Vision tarda más de 1,2 s dos veces,
-   pasa al nivel rápido.
-2. `assets/vivo.js` agrupa las líneas por cercanía en etiquetas, parte los
-   grupos que tienen dos precios separados (etiquetas pegadas en el riel) y
-   parsea cada una con el parser de `assets/ocr.js`.
-3. `Seguimiento` empareja cada etiqueta con la del fotograma anterior (por
-   posición y, si la cámara saltó, por precio + gramaje). A la segunda vista
-   se confirma y entra en la sesión una sola vez.
-4. El overlay dibuja cada etiqueta con su precio por 100 g/ml; el ganador en
-   verde con ★. Tocar una etiqueta la agrega al instante o abre su ficha.
-5. Al confirmarse, Apple Intelligence relee el texto de esa etiqueta
-   (`interpretarEtiqueta`) y mejora nombre, gramaje y pack. Las fichas
-   mejoradas llevan ✦.
+La cámara es nativa; el cerebro sigue en la web.
 
-Pruebas de la lógica sin dispositivo: `node lab/vivo-test.mjs`.
+1. `abrirBarrido` presenta `BarridoView` (SwiftUI) a pantalla completa.
+   `BarridoModelo` arma la `AVCaptureSession` (1080p, buffers ya en
+   vertical) y pasa cada fotograma a Vision (`.accurate`; baja a `.fast` si
+   tarda más de 1,2 s dos veces).
+2. `EtiquetasVivo.swift` (puerto de `assets/vivo.js`) agrupa las líneas por
+   cercanía en etiquetas, parte los grupos con dos precios separados
+   (etiquetas pegadas en el riel) y `SeguimientoVivo` las empareja con el
+   fotograma anterior (posición y, si la cámara saltó, firma). A la segunda
+   vista se confirma y se entrega una sola vez.
+3. Cada etiqueta confirmada llega a la web como evento `barridoEtiqueta`
+   (texto, palabras con caja, miniatura recortada). La web la parsea con
+   `parseEtiqueta`, la mete en la bandeja, pide a Apple Intelligence que
+   la refine (`interpretarEtiqueta`) y devuelve al overlay el precio por
+   100 g y el ganador (`actualizarEtiquetas`).
+4. El overlay (Canvas de SwiftUI) dibuja cada etiqueta con su chip; el
+   ganador en verde con ★. Tocar una etiqueta sin confirmar la agrega al
+   instante; tocar una confirmada cierra la cámara y abre su ficha en la
+   web. Hay pausa, linterna y enfoque por toque.
+5. Al cerrar (`Listo`), la bandeja, el veredicto, la explicación ✦ y el
+   carrito son los de siempre.
+
+El barrido en el WebView (`cicloBarrido` en `app.js`) sigue existiendo como
+alternativa cuando el plugin no ofrece `barridoNativo` (Android, pruebas).
+Pruebas de la lógica sin dispositivo: `node lab/vivo-test.mjs` (la versión
+Swift es un puerto línea a línea; conviene añadirle XCTest en el Mac).
 
 ## Recordatorios y Notas
 
@@ -68,7 +79,8 @@ Worker de `worker/` para interpretar.
 
 ## Requisitos en el Mac
 
-- Xcode 16 o superior (para iOS 26 y Foundation Models, Xcode 26).
+- Xcode 16 o superior (para iOS 26 y Foundation Models, Xcode 26). El
+  target compila para iOS 17 o superior.
 - Node 22+.
 - Un iPhone con iOS 15+ para Vision. Para Apple Intelligence: iPhone 15 Pro o
   posterior con iOS 26 y Apple Intelligence activado en Ajustes.
@@ -117,6 +129,9 @@ native/
         ├── LectorEtiqueta.swift       # Vision: OCR con cajas por palabra + código de barras
         ├── AppleIA.swift              # Foundation Models: etiqueta, producto dictado, veredicto
         ├── Recordatorios.swift        # EventKit: exportar e importar la lista de compras
+        ├── BarridoView.swift          # SwiftUI: cámara a pantalla completa, overlay, controles
+        ├── BarridoModelo.swift        # AVCaptureSession + Vision por fotograma + entrega a la web
+        ├── EtiquetasVivo.swift        # Puerto de assets/vivo.js: agrupar etiquetas y seguimiento
         ├── Info.plist                 # permisos de cámara y Recordatorios
         └── Base.lproj/Main.storyboard # usa MainViewController
 ```

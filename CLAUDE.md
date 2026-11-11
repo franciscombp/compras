@@ -78,7 +78,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   └── wrangler.toml      # ORIGENES_PERMITIDOS, MODELO; secrets: ANTHROPIC_API_KEY, LECTOR_TOKEN
 ├── native/                # Optional iOS wrapper: Capacitor + Vision + Apple Intelligence (see native/README.md)
 │   ├── scripts/build-web.mjs       # copies the PWA to native/dist (no Service Worker)
-│   └── ios/App/App/*.swift         # QuantoNativoPlugin (bridge), LectorEtiqueta (Vision OCR + barcode), AppleIA (Foundation Models), Recordatorios (EventKit)
+│   └── ios/App/App/*.swift         # QuantoNativoPlugin (bridge), LectorEtiqueta (Vision OCR + barcode), AppleIA (Foundation Models), Recordatorios (EventKit), BarridoView/BarridoModelo/EtiquetasVivo (SwiftUI camera sweep)
 ├── .github/workflows/
 │   └── actualizar-catalogo.yml  # Weekly cron (Mon 09:00 UTC) + manual dispatch
 └── docs/                  # Documentation
@@ -160,7 +160,8 @@ Event delegation handles:
 
 Two modes on the camera screen, chosen with the chips on the stage and remembered in localStorage (`quanto.scan_modo`):
 
-- **Barrido** (native only, default there): `cicloBarrido()` sends full frames to Vision every ~100 ms with `ia: false`; `agruparEtiquetas()` in `vivo.js` clusters the OCR lines into price tags and parses each; `Seguimiento` tracks them across frames and confirms a tag on its 2nd sighting; confirmed tags enter `scanSession.capturas` once (`incorporarPista`) with a cropped thumbnail, then `refinarConIA()` asks Apple Intelligence to reread that tag's text (name, content, pack; never the price; skipped if the user edited the capture). `dibujarOverlay()` draws boxes and price-per-100 chips on `#scanOverlay`, best in green; tapping a box confirms it immediately or opens `openCapturaSheet`. Pause chip stops the loop; the tray and verdict below are the same as in capture mode.
+- **Barrido nativo** (iOS app, default when `capacidades().barridoNativo`): `renderBarridoNativo()` shows a card and opens the SwiftUI camera (`abrirBarridoNativo`). Vision, clustering and tracking run in Swift (`EtiquetasVivo.swift`, a port of `vivo.js`); each confirmed label arrives as a `barridoEtiqueta` event and `incorporarEtiquetaNativa()` parses it with `parseEtiqueta`, dedupes by `firmaDe`, adds it to `scanSession.capturas`, refines with Apple Intelligence and sends chips back to the overlay (`enviarChipsNativos` → `actualizarEtiquetasNativas`). `barridoToque` on a confirmed label closes the camera and opens `openCapturaSheet`.
+- **Barrido** (WebView fallback when the plugin has no native camera): `cicloBarrido()` sends full frames to Vision every ~100 ms with `ia: false`; `agruparEtiquetas()` in `vivo.js` clusters the OCR lines into price tags and parses each; `Seguimiento` tracks them across frames and confirms a tag on its 2nd sighting; confirmed tags enter `scanSession.capturas` once (`incorporarPista`) with a cropped thumbnail, then `refinarConIA()` asks Apple Intelligence to reread that tag's text (name, content, pack; never the price; skipped if the user edited the capture). `dibujarOverlay()` draws boxes and price-per-100 chips on `#scanOverlay`, best in green; tapping a box confirms it immediately or opens `openCapturaSheet`. Pause chip stops the loop; the tray and verdict below are the same as in capture mode.
 - **Captura** (manual button, plus optional Auto):
 
 1. User captures product label
