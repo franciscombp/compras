@@ -15,7 +15,7 @@ import {
   duplicarLista, cerrarLista, getHistorialListasCerradas, eliminarItem,
 } from "../data/store.js";
 import { parseNumero, parseLectura, preprocesarEtiqueta } from "./ocr.js";
-import { services } from "../data/api.js";
+import { services, getLectorConfig, setLectorConfig, lectorDisponible } from "../data/api.js";
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -185,6 +185,12 @@ document.addEventListener("click", (e) => {
   // Home: nueva lista
   if (e.target.closest("#homeNuevaLista")) {
     openNuevaListaSheet();
+    return;
+  }
+
+  // Escáner: configurar el lector IA
+  if (e.target.closest("#lectorConfig")) {
+    openLectorSheet();
     return;
   }
 
@@ -588,6 +594,39 @@ async function leerEtiqueta(canvas) {
   return { data, texto: data.text || "", confianza: data.confidence ?? 0 };
 }
 
+let avisoLectorIA = 0;
+
+/**
+ * Lee la etiqueta con el lector IA (worker/) si está configurado y hay red;
+ * si no, o si falla, usa el OCR local. Devuelve { datos, fuente } donde
+ * fuente es "ia" u "ocr" y datos tiene la forma de parseEtiqueta.
+ */
+async function leerDatosEtiqueta(canvas) {
+  if (lectorDisponible()) {
+    try {
+      const datos = await services.leerEtiqueta(canvas);
+      return { datos, fuente: "ia" };
+    } catch (e) {
+      // Avisa como mucho una vez por minuto para no tapar el estado de la cámara.
+      if (Date.now() - avisoLectorIA > 60000) {
+        avisoLectorIA = Date.now();
+        toast(MENSAJES_LECTOR[e?.codigo] || "El lector IA no respondió; se usa el OCR del teléfono.");
+      }
+    }
+  }
+  const lectura = await leerEtiqueta(canvas);
+  return { datos: parseLectura(lectura.data), fuente: "ocr", confianzaOcr: lectura.confianza };
+}
+
+const MENSAJES_LECTOR = {
+  clave: "La clave del lector IA no coincide. Revísala en Lector IA.",
+  api_key: "El Worker no tiene una API key válida de Anthropic.",
+  sin_api_key: "El Worker no tiene configurada la API key de Anthropic.",
+  limite: "El lector IA está saturado; se usa el OCR del teléfono por ahora.",
+  timeout: "El lector IA tardó demasiado; se usa el OCR del teléfono.",
+  http_403: "El Worker rechaza este origen. Revisa ORIGENES_PERMITIDOS.",
+};
+
 const PROBLEMAS_CAMARA = {
   inseguro: {
     titulo: "Contexto no seguro",
@@ -688,6 +727,7 @@ async function iniciarEscaneo() {
   detenerCamara();
   scanSession.auto = false;
   renderScanTray();
+  refrescarBotonLectorIA();
   const soporte = soporteCamara();
   if (soporte !== "ok") { renderProblemaCamara(soporte); return; }
 
@@ -719,6 +759,43 @@ async function iniciarEscaneo() {
   $("#autoChip").addEventListener("click", () => setAuto(!scanSession.auto));
 }
 
+function refrescarBotonLectorIA() {
+  const b = $("#lectorConfig");
+  if (b) b.textContent = getLectorConfig().url ? "Lector IA: activado ✦" : "Lector IA: configurar";
+}
+
+/**
+ * Panel para conectar el lector IA (worker/README.md): URL del Worker y clave
+ * opcional. Se guarda en este dispositivo; sin URL, el escáner usa Tesseract.
+ */
+function openLectorSheet() {
+  const cfg = getLectorConfig();
+  openSheet(`
+    <h2 class="sheet-title">Lector IA de etiquetas</h2>
+    <p class="sheet-sub">Manda la foto a tu Worker de Cloudflare y Claude lee precio y contenido. Si no está configurado o no hay señal, se usa el OCR del teléfono. Cómo desplegarlo: carpeta <code>worker/</code> del repositorio.</p>
+    <div class="field"><label for="lcUrl">URL del Worker</label><input class="input" id="lcUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://quanto-lector.tu-cuenta.workers.dev" value="${esc(cfg.url)}"></div>
+    <div class="field"><label for="lcToken">Clave (opcional, la misma que LECTOR_TOKEN)</label><input class="input" id="lcToken" type="password" autocomplete="off" placeholder="Déjalo vacío si no pusiste clave" value="${esc(cfg.token)}"></div>
+    <div class="button-col">
+      <button class="btn btn-block" id="lcGuardar">Guardar</button>
+      ${cfg.url ? `<button class="btn btn-danger btn-block" id="lcQuitar">Desactivar lector IA</button>` : ""}
+      <button class="btn btn-quiet" id="lcCancelar">Cancelar</button>
+    </div>`);
+  const refrescar = refrescarBotonLectorIA;
+  $("#lcGuardar", sheetContent).addEventListener("click", () => {
+    try {
+      const nueva = setLectorConfig({ url: $("#lcUrl", sheetContent).value, token: $("#lcToken", sheetContent).value });
+      closeSheet(); refrescar();
+      toast(nueva.url ? "Lector IA activado para este dispositivo." : "Lector IA desactivado.");
+    } catch {
+      toast("La URL debe empezar por https://");
+    }
+  });
+  $("#lcQuitar", sheetContent)?.addEventListener("click", () => {
+    setLectorConfig({ url: "" }); closeSheet(); refrescar(); toast("Lector IA desactivado.");
+  });
+  $("#lcCancelar", sheetContent).addEventListener("click", closeSheet);
+}
+
 /** Captura manual: la cámara sigue encendida para encadenar la siguiente. */
 async function capturarEtiqueta() {
   const btn = $("#scanCapture");
@@ -726,16 +803,16 @@ async function capturarEtiqueta() {
   if (!canvas) return;
   flashCamara();
   if (btn) btn.disabled = true;
-  setScanStatus("Leyendo etiqueta…");
+  setScanStatus(lectorDisponible() ? "Leyendo etiqueta con IA…" : "Leyendo etiqueta…");
   try {
-    const lectura = await leerEtiqueta(canvas);
-    const datos = parseLectura(lectura.data);
+    const { datos, fuente } = await leerDatosEtiqueta(canvas);
     if (datos.precio === null && datos.contenido === null) {
       setScanStatus("No se leyó un precio - acércate a la etiqueta y captura otra vez.");
       return;
     }
     const cap = agregarCaptura(datos, canvas);
-    setScanStatus(`Capturada: ${fmt(cap.precio)}${cap.contenido ? ` · ${cap.contenido} ${cap.unidad}` : ""} - lista para la siguiente.`);
+    const sello = fuente === "ia" ? " ✦" : "";
+    setScanStatus(`Capturada${sello}: ${fmt(cap.precio)}${cap.contenido ? ` · ${cap.contenido} ${cap.unidad}` : ""} - lista para la siguiente.`);
   } catch (e) {
     setScanStatus("No se pudo cargar el lector (necesita conexión la primera vez). Reintenta.");
   } finally {
@@ -814,7 +891,15 @@ async function cicloAuto() {
     );
     if (firma === autoFirmaPrevia && !yaCapturada) {
       flashCamara();
-      const cap = agregarCaptura(datos, canvas);
+      // El OCR local detecta que la etiqueta está quieta; la lectura buena la
+      // hace el lector IA cuando existe (una llamada por captura, no por ciclo).
+      let finales = datos;
+      if (lectorDisponible()) {
+        setScanStatus("Auto: etiqueta estable, leyendo con IA…");
+        const { datos: ia, fuente } = await leerDatosEtiqueta(canvas);
+        if (fuente === "ia" && ia.precio !== null) finales = ia;
+      }
+      const cap = agregarCaptura(finales, canvas);
       setScanStatus(`Auto: capturada ${fmt(cap.precio)} ✓ - apunta a la siguiente etiqueta.`);
       autoCooldownHasta = Date.now() + 3000;
       autoFirmaPrevia = null;

@@ -6,6 +6,10 @@
  *   offline una vez cacheado por el Service Worker.
  * - searchByBarcode(code): consulta Open Food Facts (API pública con CORS)
  *   y cae al catálogo local si no hay conexión.
+ * - leerEtiqueta(canvas): manda la foto al lector IA (worker/, Cloudflare +
+ *   Claude) y devuelve { precio, contenido, unidad, unidades, nombre }. La URL
+ *   y la clave se guardan por dispositivo en localStorage; si no están, el
+ *   escáner usa el OCR local (Tesseract) como siempre.
  *
  * Formato de producto del catálogo (claves cortas para que el JSON pese poco):
  *   { n: nombre, m: marca, c: contenido, u: unidad, e: envases,
@@ -25,6 +29,53 @@ function getCatalogo() {
 
 function normalizarTexto(s) {
   return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+// ---------------------------------------------------------------------------
+// Lector IA de etiquetas (opcional)
+// ---------------------------------------------------------------------------
+
+const LECTOR_KEY = "quanto.lector";
+// Si despliegas el Worker, puedes fijar aquí la URL para no configurarla en
+// cada teléfono. La configuración guardada en el dispositivo tiene prioridad.
+const LECTOR_URL_DEFECTO = "";
+
+export function getLectorConfig() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(LECTOR_KEY) || "null");
+    if (guardado?.url) return { url: guardado.url, token: guardado.token || "" };
+  } catch { /* valor corrupto: se ignora */ }
+  return { url: LECTOR_URL_DEFECTO, token: "" };
+}
+
+export function setLectorConfig({ url, token }) {
+  const limpia = String(url || "").trim().replace(/\/+$/, "");
+  if (!limpia) {
+    localStorage.removeItem(LECTOR_KEY);
+    return getLectorConfig();
+  }
+  if (!/^https?:\/\//i.test(limpia)) throw new Error("url_invalida");
+  localStorage.setItem(LECTOR_KEY, JSON.stringify({ url: limpia, token: String(token || "").trim() }));
+  return getLectorConfig();
+}
+
+/** Hay lector configurado y conexión para usarlo. */
+export function lectorDisponible() {
+  return Boolean(getLectorConfig().url) && navigator.onLine;
+}
+
+/** Canvas -> JPEG base64 acotado (lado mayor 1280 px): suficiente para leer y barato en tokens. */
+function canvasABase64(canvas, ladoMax = 1280) {
+  let fuente = canvas;
+  const mayor = Math.max(canvas.width, canvas.height);
+  if (mayor > ladoMax) {
+    const escala = ladoMax / mayor;
+    fuente = document.createElement("canvas");
+    fuente.width = Math.round(canvas.width * escala);
+    fuente.height = Math.round(canvas.height * escala);
+    fuente.getContext("2d").drawImage(canvas, 0, 0, fuente.width, fuente.height);
+  }
+  return fuente.toDataURL("image/jpeg", 0.82).split(",")[1];
 }
 
 export const services = {
@@ -83,6 +134,48 @@ export const services = {
     const { productos = [] } = await getCatalogo();
     const p = productos.find((x) => x.b === limpio);
     return p ? { nombre: p.n, marca: p.m, contenido: p.c, unidad: p.u, precio: p.p, fuente: "catalogo" } : null;
+  },
+
+  /**
+   * Lee una etiqueta con el lector IA. Devuelve el mismo objeto que
+   * parseEtiqueta (assets/ocr.js) más `confianza` ("alta" | "media" | "baja").
+   * Lanza Error con .codigo si no hay lector, no hay red o el Worker falla,
+   * para que el escáner caiga al OCR local.
+   */
+  async leerEtiqueta(canvas, { timeoutMs = 25000 } = {}) {
+    const { url, token } = getLectorConfig();
+    if (!url) throw Object.assign(new Error("sin_lector"), { codigo: "sin_lector" });
+    if (!navigator.onLine) throw Object.assign(new Error("sin_red"), { codigo: "sin_red" });
+
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    let res;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ imagen: canvasABase64(canvas), tipo: "image/jpeg" }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (e) {
+      throw Object.assign(new Error("conexion"), { codigo: e?.name === "TimeoutError" ? "timeout" : "conexion" });
+    }
+
+    let data = null;
+    try { data = await res.json(); } catch { /* cuerpo vacío o no JSON */ }
+    if (!res.ok) throw Object.assign(new Error(data?.error || `http_${res.status}`), { codigo: data?.error || `http_${res.status}`, status: res.status });
+
+    const unidad = ["g", "ml", "unidad"].includes(data?.unidad) ? data.unidad : null;
+    const contenido = Number.isFinite(data?.contenido) && data.contenido > 0 && unidad ? Math.round(data.contenido) : null;
+    return {
+      precio: Number.isFinite(data?.precio) && data.precio > 0 ? data.precio : null,
+      contenido,
+      unidad: contenido ? unidad : null,
+      unidades: Math.min(48, Math.max(1, Math.round(Number(data?.unidades) || 1))),
+      nombre: String(data?.nombre || "").trim(),
+      confianza: ["alta", "media", "baja"].includes(data?.confianza) ? data.confianza : "media",
+    };
   },
 
   /** Metadatos del catálogo local (fecha de actualización, fuentes). */

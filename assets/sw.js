@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v12-catalogo";
+const CACHE_VERSION = "v13-lector-ia";
 const CACHE_NAME = `quanto-${CACHE_VERSION}`;
 const SCOPE = new URL('.', self.location).pathname;
 

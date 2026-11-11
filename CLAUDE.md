@@ -61,6 +61,9 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   ├── etiquetas.html     # Label-testing page: upload photos, see OCR + parse results
 │   ├── parser-test.mjs    # Parser unit tests: node lab/parser-test.mjs
 │   └── fetch-catalogo.mjs # Catalog fetcher (runs in weekly GitHub Action)
+├── worker/                # Optional Cloudflare Worker: label reader with Claude (see worker/README.md)
+│   ├── src/index.js       # POST {imagen, tipo} -> {precio, contenido, unidad, unidades, nombre, confianza}
+│   └── wrangler.toml      # ORIGENES_PERMITIDOS, MODELO; secrets: ANTHROPIC_API_KEY, LECTOR_TOKEN
 ├── .github/workflows/
 │   └── actualizar-catalogo.yml  # Weekly cron (Mon 09:00 UTC) + manual dispatch
 └── docs/                  # Documentation
@@ -99,12 +102,10 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
   - History: `getHistorialListasCerradas()`
 
 **5. APIs** (`data/api.js`)
-- Prepared stubs for future services:
-  - `searchByBarcode(code)`
-  - `searchProduct(nombre)`
-  - `compareOnline(productos)`
-  - `syncData(items)`
-- Currently unused but ready for phase 2 (backend integration)
+- `searchProduct(nombre)`: local catalog search
+- `searchByBarcode(code)`: Open Food Facts, falls back to the local catalog
+- `leerEtiqueta(canvas)`: sends the label photo to the Worker in `worker/` and returns the same shape as `parseEtiqueta`. Config (URL + optional token) lives in localStorage via `getLectorConfig()` / `setLectorConfig()`; `lectorDisponible()` is true when a URL is set and the device is online
+- Stubs for phase 2: `compareOnline(productos)`, `syncData(items)`
 
 **6. Offline** (`assets/sw.js`)
 - Service Worker with network-first strategy
@@ -130,12 +131,10 @@ Event delegation handles:
 ### Comparador OCR (Camera Comparison)
 
 1. User captures product label
-2. Tesseract.js extracts text (price, content, units)
-3. Parsing logic extracts:
-   - Price (supports "$3", "3.50", "3,50")
-   - Content (grams, ml, units)
-   - Number of items in pack
-   - Product name (Spanish words only, filters noise)
+2. `leerDatosEtiqueta(canvas)` in `app.js` picks the reader:
+   - **Lector IA** (if configured in the "Lector IA" sheet on the camera screen and online): `services.leerEtiqueta()` posts the JPEG to the Cloudflare Worker, Claude returns structured JSON. Any failure falls back to the local path and shows one toast per minute at most.
+   - **Local OCR**: Tesseract.js extracts text, then `parseEtiqueta` in `ocr.js` extracts price ("$3", "3.50", "3,50"), content (g, ml, units), pack count and a product name
+3. Auto mode always uses local OCR to detect a stable frame, then confirms that single frame with the Lector IA when available (one call per capture, not per cycle)
 4. Results show ranking
 
 ### Listas (Shopping Lists)
