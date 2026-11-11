@@ -29,6 +29,9 @@ const LS_KEY_ITEMS = "justo:items";             // todos los items, de todas las
 const LS_KEY_ACTIVE_LIST = "justo:activeListId";
 const LS_KEY_QUEUE = "justo:syncQueue";
 const LS_KEY_COMPARACIONES = "justo:comparaciones";
+const LS_KEY_PRECIOS = "justo:precios";          // memoria de precios observados
+const LS_KEY_AJUSTES = "justo:ajustes";
+const MAX_PRECIOS = 3000;
 
 function uuid() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -124,7 +127,8 @@ export function crearLista(nombre, comercioPrincipal = null) {
     nombre: nombre || "Nueva lista",
     creada_en: Date.now(),
     estado: "activa",
-    comercio_principal: comercioPrincipal,
+    comercio_principal: comercioPrincipal || getAjustes().tienda_habitual || null,
+    presupuesto: getAjustes().presupuesto_defecto || null,
     total_facturado_final: null,
     diferencia_vs_verificado: null,
   };
@@ -143,6 +147,22 @@ export function renombrarLista(id, nombre) {
   escribir(LS_KEY_LISTAS, listas);
   encolarCambio("renombrar_lista", { id, nombre });
   return listas[idx];
+}
+
+export function actualizarLista(id, cambios) {
+  const listas = getListas();
+  const idx = listas.findIndex((l) => l.id === id);
+  if (idx === -1) return null;
+  listas[idx] = { ...listas[idx], ...cambios };
+  escribir(LS_KEY_LISTAS, listas);
+  encolarCambio("renombrar_lista", { id, ...cambios });
+  return listas[idx];
+}
+
+/** Presupuesto de la lista (null = sin presupuesto). */
+export function setPresupuesto(id, monto) {
+  const valor = Number(monto);
+  return actualizarLista(id, { presupuesto: valor > 0 ? valor : null });
 }
 
 export function duplicarLista(id, nuevoNombre) {
@@ -245,6 +265,8 @@ export function guardarProducto(item) {
   items.push(nuevo);
   guardarTodosLosItems(items);
   encolarCambio("crear_item", nuevo);
+  if (nuevo.estado_precio === "facturado" && nuevo.precio_facturado > 0) registrarPrecioDeItem(nuevo, nuevo.precio_facturado, "facturado");
+  else if (nuevo.estado_precio === "verificado_en_tienda" && nuevo.precio_verificado > 0) registrarPrecioDeItem(nuevo, nuevo.precio_verificado, "verificado");
   return nuevo;
 }
 
@@ -266,18 +288,22 @@ export function eliminarItem(id) {
 
 /** Estimado -> Verificado en tienda (se vio en góndola/etiqueta/OCR/voz). */
 export function verificarEnTienda(id, precioVisto) {
-  return actualizarItem(id, {
+  const item = actualizarItem(id, {
     estado_precio: "verificado_en_tienda",
     precio_verificado: precioVisto,
   });
+  if (item && precioVisto > 0) registrarPrecioDeItem(item, precioVisto, "verificado");
+  return item;
 }
 
 /** Verificado -> Facturado (precio real del recibo, vía cierre de compra). */
 export function facturarItem(id, precioReal) {
-  return actualizarItem(id, {
+  const item = actualizarItem(id, {
     estado_precio: "facturado",
     precio_facturado: precioReal,
   });
+  if (item && precioReal > 0) registrarPrecioDeItem(item, precioReal, "facturado");
+  return item;
 }
 
 export function marcarEnCarrito(id, enCarrito) {
@@ -372,7 +398,155 @@ export function guardarComparacion(payload) {
   comparaciones.push(registro);
   escribir(LS_KEY_COMPARACIONES, comparaciones);
   encolarCambio("crear_comparacion", registro);
+  // Cada producto comparado es un precio visto en góndola: va a la memoria.
+  for (const it of registro.items || []) {
+    if (it.precio > 0 && it.totalContenido > 0) {
+      registrarPrecio({ nombre: it.nombre, precio: it.precio, contenido: it.totalContenido, unidad: it.unidad, unidades: 1, fuente: registro.origen || "comparador", tienda: it.tienda || null });
+    }
+  }
   return registro;
+}
+
+// ---------------------------------------------------------------------------
+// Memoria de precios — cada precio visto o pagado, por producto y tienda
+// ---------------------------------------------------------------------------
+// Es la base de la guía de ahorro: con ella la app sabe si un precio es bueno
+// para ti (vs. lo que sueles pagar), dónde lo viste más barato y cómo cambia.
+
+const STOP_CLAVE = new Set(["de", "la", "el", "los", "las", "en", "con", "sin", "y", "para", "por", "un", "una", "al", "del"]);
+const RE_UNIDAD_CLAVE = /^(g|gr|grs|kg|kgs|mg|ml|cc|cl|l|lt|lts|oz|lb|lbs|u|un|und|unid|unidades|pack|x|c\/u|cu)$/;
+
+/**
+ * Clave estable de producto a partir del nombre: minúsculas sin tildes, sin
+ * números ni unidades ni palabras vacías, tokens ordenados. "Leche entera
+ * Vita 1 L" y "leche Vita entera" comparten clave.
+ */
+export function claveProducto(nombre) {
+  const tokens = String(nombre || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9ñ\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t && !/^\d/.test(t) && !RE_UNIDAD_CLAVE.test(t) && !STOP_CLAVE.has(t) && t.length > 1);
+  return [...new Set(tokens)].sort().slice(0, 4).join(" ");
+}
+
+/** Precio por 100 g/ml o por unidad; null si no hay contenido. */
+export function precioNormalizado({ precio, contenido, unidad, unidades = 1 }) {
+  if (!(precio > 0) || !(contenido > 0)) return null;
+  const total = contenido * (unidades || 1);
+  return unidad === "unidad" ? precio / total : (precio / total) * 100;
+}
+
+export function getPrecios() {
+  return leer(LS_KEY_PRECIOS, []);
+}
+
+/**
+ * Registra una observación de precio. `contenido` es el contenido total que
+ * cubre el precio (si el item es "3 x 170 g", pasa contenido 170 y unidades 3).
+ */
+export function registrarPrecio({ nombre, precio, contenido = null, unidad = null, unidades = 1, tienda = null, fuente = "manual", fecha = Date.now() }) {
+  const clave = claveProducto(nombre);
+  if (!clave || !(precio > 0)) return null;
+  const obs = {
+    id: uuid(),
+    clave,
+    nombre: String(nombre).trim(),
+    tienda: tienda || getAjustes().tienda_habitual || null,
+    precio: Math.round(precio * 100) / 100,
+    contenido: contenido > 0 ? contenido : null,
+    unidad: contenido > 0 ? unidad : null,
+    unidades: unidades > 1 ? unidades : 1,
+    normalizado: precioNormalizado({ precio, contenido, unidad, unidades }),
+    fuente,
+    fecha,
+  };
+  const precios = getPrecios();
+  // Misma clave, misma tienda, mismo precio en las últimas 6 horas: es la misma observación.
+  const repetida = precios.find((p) => p.clave === clave && p.tienda === obs.tienda && Math.abs(p.precio - obs.precio) < 0.005 && fecha - p.fecha < 6 * 3600e3);
+  if (repetida) return repetida;
+  precios.push(obs);
+  if (precios.length > MAX_PRECIOS) precios.splice(0, precios.length - MAX_PRECIOS);
+  escribir(LS_KEY_PRECIOS, precios);
+  return obs;
+}
+
+function tiendaDeItem(item) {
+  if (item.comercio) return item.comercio;
+  const lista = getListas().find((l) => l.id === item.lista_id);
+  return lista?.comercio_principal || null;
+}
+
+function registrarPrecioDeItem(item, precio, fuente) {
+  registrarPrecio({
+    nombre: item.nombre,
+    precio,
+    contenido: item.contenido,
+    unidad: item.unidad_medida,
+    unidades: 1,
+    tienda: tiendaDeItem(item),
+    fuente,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Ajustes
+// ---------------------------------------------------------------------------
+
+const AJUSTES_DEFECTO = { tienda_habitual: "", presupuesto_defecto: null };
+
+export function getAjustes() {
+  return { ...AJUSTES_DEFECTO, ...leer(LS_KEY_AJUSTES, {}) };
+}
+
+export function setAjustes(parcial) {
+  const nuevos = { ...getAjustes(), ...parcial };
+  escribir(LS_KEY_AJUSTES, nuevos);
+  return nuevos;
+}
+
+// ---------------------------------------------------------------------------
+// Copia de seguridad — todo lo local en un JSON y vuelta
+// ---------------------------------------------------------------------------
+
+export function exportarDatos() {
+  return {
+    app: "quanto",
+    version: 1,
+    exportado_en: new Date().toISOString(),
+    listas: getListas(),
+    items: getTodosLosItems(),
+    comparaciones: getComparaciones(),
+    precios: getPrecios(),
+    ajustes: getAjustes(),
+    lista_activa: leer(LS_KEY_ACTIVE_LIST, null),
+  };
+}
+
+/**
+ * Restaura una copia. `modo` "reemplazar" borra lo local; "fusionar" añade lo
+ * que no exista (por id). Devuelve cuántos registros quedaron.
+ */
+export function importarDatos(datos, modo = "fusionar") {
+  const d = typeof datos === "string" ? JSON.parse(datos) : datos;
+  if (!d || d.app !== "quanto" || !Array.isArray(d.listas) || !Array.isArray(d.items)) throw new Error("formato");
+  const fusionar = (actuales, nuevos) => {
+    if (modo === "reemplazar") return nuevos;
+    const ids = new Set(actuales.map((x) => x.id));
+    return actuales.concat(nuevos.filter((x) => x && !ids.has(x.id)));
+  };
+  const listas = fusionar(getListas(), d.listas);
+  const items = fusionar(getTodosLosItems(), d.items);
+  const comparaciones = fusionar(getComparaciones(), d.comparaciones || []);
+  const precios = fusionar(getPrecios(), d.precios || []).sort((a, b) => a.fecha - b.fecha).slice(-MAX_PRECIOS);
+  escribir(LS_KEY_LISTAS, listas);
+  escribir(LS_KEY_ITEMS, items);
+  escribir(LS_KEY_COMPARACIONES, comparaciones);
+  escribir(LS_KEY_PRECIOS, precios);
+  if (d.ajustes) setAjustes(d.ajustes);
+  if (modo === "reemplazar" && d.lista_activa) escribir(LS_KEY_ACTIVE_LIST, d.lista_activa);
+  return { listas: listas.length, items: items.length, precios: precios.length };
 }
 
 // ---------------------------------------------------------------------------

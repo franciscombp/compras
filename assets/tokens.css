@@ -28,6 +28,8 @@
   --info-soft: color-mix(in oklab, #33618f 10%, #fffefb);
   --danger: #a8352c;
   --danger-soft: color-mix(in oklab, #a8352c 9%, #fffefb);
+  --good: #1f7a45;
+  --good-soft: color-mix(in oklab, #1f7a45 10%, #fffefb);
 
   --radius-s: 12px;
   --radius-m: 18px;
@@ -65,6 +67,8 @@
     --info-soft: color-mix(in oklab, #a9c8ea 14%, #1a1d1a);
     --danger: #f0a9a2;
     --danger-soft: color-mix(in oklab, #f0a9a2 12%, #1a1d1a);
+    --good: #8fd3a8;
+    --good-soft: color-mix(in oklab, #8fd3a8 14%, #1a1d1a);
 
     --shadow-1: 0 1px 2px rgba(0, 0, 0, .25), 0 6px 20px rgba(0, 0, 0, .25);
     --shadow-2: 0 2px 6px rgba(0, 0, 0, .35), 0 18px 44px rgba(0, 0, 0, .45);
@@ -82,6 +86,7 @@
   --brand-line: color-mix(in oklab, #c41e1e 30%, transparent);
   --info: #33618f; --info-soft: color-mix(in oklab, #33618f 10%, #fffefb);
   --danger: #a8352c; --danger-soft: color-mix(in oklab, #a8352c 9%, #fffefb);
+  --good: #1f7a45; --good-soft: color-mix(in oklab, #1f7a45 10%, #fffefb);
   --shadow-1: 0 1px 2px rgba(18, 20, 18, .04), 0 6px 20px rgba(18, 20, 18, .05);
   --shadow-2: 0 2px 6px rgba(18, 20, 18, .09), 0 18px 44px rgba(18, 20, 18, .14);
 }
@@ -95,6 +100,7 @@
   --brand-line: color-mix(in oklab, #ff6b6b 32%, transparent);
   --info: #a9c8ea; --info-soft: color-mix(in oklab, #a9c8ea 14%, #1a1d1a);
   --danger: #f0a9a2; --danger-soft: color-mix(in oklab, #f0a9a2 12%, #1a1d1a);
+  --good: #8fd3a8; --good-soft: color-mix(in oklab, #8fd3a8 14%, #1a1d1a);
   --shadow-1: 0 1px 2px rgba(0, 0, 0, .25), 0 6px 20px rgba(0, 0, 0, .25);
   --shadow-2: 0 2px 6px rgba(0, 0, 0, .35), 0 18px 44px rgba(0, 0, 0, .45);
 }
@@ -161,7 +167,7 @@ main[data-view="home"] #view-home,
 main[data-view="comparar"] #view-comparar,
 main[data-view="escanear"] #view-escanear,
 main[data-view="listas"] #view-listas,
-main[data-view="historial"] #view-historial { display: block; animation: screen-in var(--dur) var(--ease); }
+main[data-view="ahorro"] #view-ahorro { display: block; animation: screen-in var(--dur) var(--ease); }
 
 @keyframes screen-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -959,3 +965,90 @@ html.nativo #lectorConfig { pointer-events: none; color: var(--ink-3); }
 .import-row { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .import-row:last-child { border-bottom: none; }
 .import-row input { width: 20px; height: 20px; accent-color: var(--brand); flex: none; }
+
+/* ============================ Guía de ahorro ============================ */
+.screen-head { position: sticky; }
+.head-action { position: absolute; top: 6px; right: 0; }
+
+.kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.kpi {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m);
+  padding: 14px 14px 12px; box-shadow: var(--shadow-1);
+}
+.kpi .kpi-label { font-size: 11px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.kpi .kpi-value { font-size: 22px; font-weight: 750; letter-spacing: -.02em; margin-top: 4px; }
+.kpi .kpi-sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.kpi.kpi-brand { background: linear-gradient(145deg, var(--brand-soft), var(--surface)); border-color: var(--brand-line); }
+.kpi .kpi-value.good { color: var(--good); }
+.kpi .kpi-value.bad { color: var(--danger); }
+
+.tip-card {
+  display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m);
+  padding: 14px 16px; margin-top: 10px; box-shadow: var(--shadow-1); color: inherit; font: inherit;
+}
+.tip-card:active { transform: scale(.99); }
+.tip-card .tip-title { font-size: 15px; font-weight: 700; display: block; }
+.tip-card .tip-text { font-size: 13px; color: var(--ink-2); display: block; margin-top: 3px; line-height: 1.4; }
+.tip-card .tip-kind { font-size: 11px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--brand-deep); display: block; margin-bottom: 4px; }
+.tip-card.tip-caro .tip-kind { color: var(--danger); }
+.tip-card.tip-tienda .tip-kind, .tip-card.tip-recompra .tip-kind { color: var(--good); }
+
+/* Semáforo de precio: ¿bueno, normal o caro para ti? */
+.sem { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: var(--radius-full); font-size: 11.5px; font-weight: 650; white-space: nowrap; }
+.sem::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.sem-bueno { color: var(--good); background: var(--good-soft); }
+.sem-normal { color: var(--ink-2); background: var(--surface-2); }
+.sem-caro { color: var(--danger); background: var(--danger-soft); }
+.list-row .row-meta .sem { margin-left: 6px; vertical-align: middle; }
+
+/* Presupuesto */
+.budget { margin-top: 14px; }
+.budget-head { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
+.budget-head strong { color: var(--ink); }
+.budget-track { position: relative; height: 10px; border-radius: var(--radius-full); background: var(--surface-2); overflow: hidden; }
+.budget-fill { position: absolute; inset: 0 auto 0 0; border-radius: var(--radius-full); background: var(--good); transition: width var(--dur) var(--ease); }
+.budget-fill.estimado { background: color-mix(in oklab, var(--ink-3) 35%, transparent); }
+.budget-fill.warn { background: #c9842a; }
+.budget-fill.over { background: var(--danger); }
+.budget-note { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+.budget-note.over { color: var(--danger); font-weight: 600; }
+
+/* Recompra sugerida */
+.chip-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+.chip-row::-webkit-scrollbar { display: none; }
+.sug-chip {
+  flex: none; display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  min-height: 48px; padding: 8px 14px; border-radius: 14px; cursor: pointer; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink); font: inherit;
+}
+.sug-chip:active { transform: scale(.97); }
+.sug-chip .sug-name { font-size: 13.5px; font-weight: 650; }
+.sug-chip .sug-meta { font-size: 11.5px; color: var(--ink-3); }
+.sug-chip.toca { border-color: var(--brand-line); background: var(--brand-soft); }
+.sug-chip.added { opacity: .55; }
+.sug-chip svg { width: 14px; height: 14px; vertical-align: -2px; }
+.tip-card svg { width: 18px; height: 18px; }
+
+/* Pestaña Precios */
+.price-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; width: 100%; text-align: left; cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-m); padding: 12px 14px; margin-bottom: 8px; color: inherit; font: inherit; }
+.price-row .pr-name { font-size: 14.5px; font-weight: 650; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.price-row .pr-meta { font-size: 12px; color: var(--ink-2); display: block; margin-top: 2px; }
+.price-row .pr-end { display: flex; align-items: center; gap: 10px; }
+.price-row .pr-value { font-size: 15px; font-weight: 700; }
+.sparkline { width: 64px; height: 26px; display: block; }
+.sparkline polyline { fill: none; stroke: var(--ink-3); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.sparkline circle { fill: var(--brand); }
+.trend-up { color: var(--danger); }
+.trend-down { color: var(--good); }
+.trend-flat { color: var(--ink-3); }
+.hist-row { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.hist-row:last-child { border-bottom: none; }
+.hist-row .hist-meta { color: var(--ink-3); font-size: 12px; }
+.store-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.store-row:last-child { border-bottom: none; }
+.store-bar { height: 6px; border-radius: 3px; background: var(--good); margin-top: 6px; }
+.top-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 13.5px; padding: 6px 0; }
+.top-track { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.top-track span { display: block; height: 100%; background: var(--brand); }

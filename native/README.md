@@ -11,6 +11,7 @@ La misma web de Quanto empaquetada como app iOS. Lo nativo es un plugin
 | Interpretar la etiqueta (precio, contenido, pack, nombre) | Apple Intelligence (Foundation Models, iOS 26+) | Comparar con cámara |
 | Interpretar una frase dictada o escrita ("dos leches Vita de litro a 1.25") | Apple Intelligence | Agregar item a la lista |
 | Explicar el veredicto en lenguaje natural | Apple Intelligence | Comparador manual y cámara |
+| Coach de ahorro: redacta el consejo de la semana con tus números reales | Apple Intelligence | Pantalla Ahorro |
 | Vibración al capturar, pantalla encendida en la góndola | UIKit | Comparar con cámara |
 | Enviar la lista a Recordatorios y traer pendientes de allí | EventKit | Listas → ⋯ |
 | Compartir la lista a Notas, Mensajes, WhatsApp… | UIActivityViewController | Listas → ⋯ |
@@ -58,8 +59,8 @@ Pruebas de la lógica sin dispositivo: `node lab/vivo-test.mjs`.
 
 Toda la web habla con el dispositivo a través de `data/nativo.js`, que expone
 `capacidades`, `leerEtiquetaNativa`, `interpretarEtiqueta`,
-`interpretarProducto`, `explicarComparacion`, `haptico`, `mantenerPantalla`,
-`exportarRecordatorios`, `importarRecordatorios` y `compartir`. En web esas funciones
+`interpretarProducto`, `explicarComparacion`, `redactarConsejo`, `haptico`,
+`mantenerPantalla`, `exportarRecordatorios`, `importarRecordatorios` y `compartir`. En web esas funciones
 devuelven `null`/`false` y la app usa sus alternativas. Para Android basta con
 un plugin de Capacitor con el mismo nombre (`QuantoNativo`) y los mismos
 métodos, por ejemplo con ML Kit (texto y códigos de barras) y Gemini Nano o el

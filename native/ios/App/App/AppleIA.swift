@@ -122,6 +122,31 @@ enum AppleIA {
         return nil
     }
 
+    // MARK: - Coach de ahorro
+
+    /// Redacta un consejo semanal breve a partir de los números que calcula
+    /// data/ahorro.js (gasto del mes, tiendas, frecuentes, hallazgos).
+    static func consejo(resumen: String) async throws -> [String: Any]? {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *), disponible() {
+            let instrucciones = contexto + """
+
+            Eres el coach de ahorro de la persona. Recibes un resumen con sus números reales de compras y algunos hallazgos ya calculados. \
+            Escribe un título de máximo seis palabras y un consejo de dos o tres frases cortas, en español sencillo y en segunda persona, \
+            que destaque la acción más valiosa para gastar menos esta semana. Usa solo los datos del resumen, sin inventar cifras, \
+            y menciona como mucho dos números.
+            """
+            let session = LanguageModelSession(instructions: instrucciones)
+            let v = try await session.respond(to: resumen, generating: ConsejoGenerado.self).content
+            return [
+                "titulo": limpiar(v.titulo),
+                "consejo": v.consejo.trimmingCharacters(in: .whitespacesAndNewlines),
+            ]
+        }
+        #endif
+        return nil
+    }
+
     // MARK: - Saneado
 
     private static func unidadValida(_ u: String) -> String? {
@@ -193,5 +218,14 @@ struct VeredictoGenerado {
 
     @Guide(description: "Una o dos frases cortas en español sencillo explicando por qué y qué trampa evitar.")
     var explicacion: String
+}
+@available(iOS 26.0, *)
+@Generable(description: "Consejo semanal de ahorro")
+struct ConsejoGenerado {
+    @Guide(description: "Título de máximo seis palabras.")
+    var titulo: String
+
+    @Guide(description: "Dos o tres frases cortas con la acción más valiosa para gastar menos esta semana.")
+    var consejo: String
 }
 #endif

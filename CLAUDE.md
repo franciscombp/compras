@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-**Quanto** is a progressive web app (PWA) for comparing product prices per 100g/ml and managing shopping lists with price memory. The entire app runs locally in the browser—no backend required until API integration is needed.
+**Quanto** is a progressive web app (PWA) that works as a personal savings guide for grocery shopping: it compares product prices per 100g/ml, keeps shopping lists with a budget, remembers every price you see or pay (per product and store) and turns that memory into price traffic lights, store comparisons, restock suggestions and concrete savings tips. The entire app runs locally in the browser—no backend required until API integration is needed.
 
 - **Live**: https://franciscombp.github.io/compras/
 - **Architecture**: HTML + vanilla JavaScript + localStorage (no build, no dependencies)
@@ -35,6 +35,7 @@ cd native && npm install && npm run ios   # copies the web, syncs Capacitor, ope
 
 - **Clear Service Worker cache**: Change `CACHE_VERSION` in `assets/sw.js` to force a fresh cache
 - **Validate JavaScript syntax**: `node -c assets/app.js`
+- **Run the logic tests**: `node lab/parser-test.mjs && node lab/vivo-test.mjs && node lab/ahorro-test.mjs`
 - **Check for smart quotes**: `grep -P '[""''«»‹›„‚]' assets/app.js` (causes syntax errors)
 - **Commit and deploy**: `git push origin main` → GitHub Pages updates automatically
 
@@ -61,7 +62,8 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   ├── tokens.css         # Design system (colors, typography, layout)
 │   └── sw.js              # Service Worker (network-first caching)
 ├── data/
-│   ├── store.js           # Data layer: localStorage + sync queue
+│   ├── store.js           # Data layer: localStorage + sync queue + price memory, budgets, settings, backup
+│   ├── ahorro.js          # Savings engine: product stats, price traffic light, summary, frequents, store comparison, tips (pure, tested)
 │   ├── api.js             # searchProduct (local catalog) + searchByBarcode (Open Food Facts) + leerEtiqueta (Worker)
 │   ├── nativo.js          # Bridge to the native plugin (QuantoNativo); returns null/false on the web
 │   └── catalogo.json      # Product catalog: seed + weekly GitHub Action updates
@@ -69,6 +71,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   ├── etiquetas.html     # Label-testing page: upload photos, see OCR + parse results
 │   ├── parser-test.mjs    # Parser unit tests: node lab/parser-test.mjs
 │   ├── vivo-test.mjs      # Live sweep tests: node lab/vivo-test.mjs
+│   ├── ahorro-test.mjs    # Savings engine tests: node lab/ahorro-test.mjs [seed.json]  (seed = localStorage dump for browser tests)
 │   └── fetch-catalogo.mjs # Catalog fetcher (runs in weekly GitHub Action)
 ├── worker/                # Optional Cloudflare Worker: label reader with Claude (see worker/README.md)
 │   ├── src/index.js       # POST {imagen, tipo} -> {precio, contenido, unidad, unidades, nombre, confianza}
@@ -84,7 +87,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 ### Layers
 
 **1. Presentation** (`index.html` + `assets/tokens.css`)
-- 5 screens: home, comparar, escanear, listas, historial
+- 5 screens: home, comparar, escanear, listas, ahorro (tabs Resumen / Precios / Compras)
 - Navigation via `data-view` attribute and `data-goto` buttons
 - Bottom sheet modal for actions
 - Navbar with 4 items (fixed at bottom)
@@ -108,10 +111,18 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 - Multiple shopping lists with items
 - Sync queue for future backend integration
 - Core exports:
-  - Lists: `getListas()`, `crearLista()`, `getListaActivaId()`
+  - Lists: `getListas()`, `crearLista()`, `getListaActivaId()`, `actualizarLista()`, `setPresupuesto()` (lists carry `comercio_principal` and `presupuesto`)
   - Items: `guardarProducto()`, `getLista()`, `eliminarItem()`
   - Totals: `calcularTotales()`
   - History: `getHistorialListasCerradas()`
+  - Price memory: `registrarPrecio()`, `getPrecios()`, `claveProducto()`, `precioNormalizado()`. Observations are recorded automatically by `verificarEnTienda`, `facturarItem`, `guardarProducto` (when created already verified/invoiced) and `guardarComparacion`; duplicates (same key, store, price within 6 h) collapse. Store = item.comercio → list.comercio_principal → ajustes.tienda_habitual
+  - Settings: `getAjustes()` / `setAjustes()` (`tienda_habitual`, `presupuesto_defecto`)
+  - Backup: `exportarDatos()` / `importarDatos(json, "fusionar"|"reemplazar")`
+
+**4b. Savings engine** (`data/ahorro.js`, pure functions over the store)
+- `estadisticasProducto(nombre)`: last / minimum / habitual (median) price per 100 g/ml (or per package when no content), per store, trend, series. Product keys are fuzzy: `clavesCompatibles()` merges names sharing most words ("Leche Vita" ↔ "Leche entera Vita 1 L")
+- `semaforoPrecio({nombre, precio, contenido, unidad})` → `bueno` / `normal` / `caro` / `sin_datos` with an explanatory text (≤ min → bueno; ≤ −5 % vs habitual → bueno; ≥ +8 % → caro)
+- `resumenAhorro()`, `productosFrecuentes()` (interval between purchases, `toca` when due), `sugerenciasRecompra(listaId)`, `comparativaTiendas()`, `consejos({listaId})` (rule engine: caro, tienda, recompra, subida, caja, gasto, mes, inicio), `resumenParaCoach()` (plain text for Apple Intelligence)
 
 **5. APIs** (`data/api.js`)
 - `searchProduct(nombre)`: local catalog search
@@ -162,7 +173,9 @@ Two modes on the camera screen, chosen with the chips on the stage and remembere
 
 ### Listas (Shopping Lists)
 
-List options (⋯) also offer: **Enviar a Recordatorios** / **Traer pendientes de Recordatorios** (native only, EventKit via `nativo.js`; items import with `fuente: "recordatorios"`, duplicates unchecked by `buscarItemSimilar`) and **Compartir lista** (`textoLista()` → native share sheet, `navigator.share` or clipboard).
+Each row shows price per 100 g/ml and a price traffic light (`semChip`) from the memory; the list card shows a budget bar (`htmlPresupuesto`: grey = estimated total, green/amber/red = what is already in the cart) when the list has `presupuesto`. The item sheet shows what the memory knows (`htmlMemoriaItem`).
+
+List options (⋯) also offer: name, store and budget; **Enviar a Recordatorios** / **Traer pendientes de Recordatorios** (native only, EventKit via `nativo.js`; items import with `fuente: "recordatorios"`, duplicates unchecked by `buscarItemSimilar`) and **Compartir lista** (`textoLista()` → native share sheet, `navigator.share` or clipboard).
 
 1. Create new list (with optional store name)
 2. Add items manually (5-step wizard in `openAddItemSheet`) or from comparador. In the wizard, leaving the name step with a phrase that contains numbers calls `interpretarProducto()` (Apple Intelligence) and prefills price, quantity and content; the summary step re-renders from `wizard.datos`
@@ -170,10 +183,12 @@ List options (⋯) also offer: **Enviar a Recordatorios** / **Traer pendientes d
 4. Close list when done shopping (records actual total paid)
 5. Items move to historial
 
-### Historial (Purchase History)
+### Ahorro (Savings guide, `renderAhorro`)
 
-- Shows closed lists with total paid vs estimated
-- No editing (immutable records)
+- **Resumen**: KPIs (this month vs last, average ticket, saved by comparing, shelf vs checkout), Apple Intelligence coach note when native (`pedirConsejoCoach` → `redactarConsejo`), tips (`tipCard`, clickable: goto or add product), restock chips (`sugChip` → `agregarSugerido`), store comparison, top spend (90 days), most-bought products
+- **Precios**: searchable list of every product in the memory with sparkline, trend arrow and minimum; tap → `openPrecioSheet` with stores and history
+- **Compras**: closed lists with total paid vs expected (immutable)
+- Home shows a compact version (`renderHomeAhorro`, `renderHomeRecompra`) and the settings button (`openAjustesSheet`: habitual store, default budget, Lector IA on web, backup export/import)
 
 ## Important Implementation Details
 

@@ -4,7 +4,7 @@
  * se toca desde aquí salvo por sus funciones exportadas.
  *
  * Navegación: main[data-view] con 5 pantallas (home, comparar, escanear,
- * listas, historial). Una acción principal por pantalla.
+ * listas, ahorro). Una acción principal por pantalla.
  */
 
 import {
@@ -13,10 +13,15 @@ import {
   calcularTotales, sincronizarPendientes, getSyncQueue, guardarComparacion,
   getListas, getListaActivaId, setListaActiva, crearLista, renombrarLista,
   duplicarLista, cerrarLista, getHistorialListasCerradas, eliminarItem,
+  actualizarLista, setPresupuesto, getAjustes, setAjustes, exportarDatos, importarDatos,
 } from "../data/store.js";
+import {
+  estadisticasProducto, semaforoPrecio, productosConMemoria, resumenAhorro,
+  sugerenciasRecompra, consejos, resumenParaCoach, precioNormalizado,
+} from "../data/ahorro.js";
 import { parseNumero, parseLectura, parseEtiqueta, extraerPistas, extraerMedidaDeNombre, preprocesarEtiqueta } from "./ocr.js";
 import { services, getLectorConfig, setLectorConfig, lectorDisponible } from "../data/api.js";
-import { esNativo, capacidades, leerEtiquetaNativa, interpretarEtiqueta, interpretarProducto, explicarComparacion, haptico, mantenerPantalla, exportarRecordatorios, importarRecordatorios, compartir } from "../data/nativo.js";
+import { esNativo, capacidades, leerEtiquetaNativa, interpretarEtiqueta, interpretarProducto, explicarComparacion, redactarConsejo, haptico, mantenerPantalla, exportarRecordatorios, importarRecordatorios, compartir } from "../data/nativo.js";
 import { agruparEtiquetas, Seguimiento, mapearCaja, normalizadoDe } from "./vivo.js";
 
 const $ = (s, root = document) => root.querySelector(s);
@@ -27,6 +32,7 @@ if (esNativo()) document.documentElement.classList.add("nativo");
 const state = {
   view: "home",
   scanReturnTo: "home",
+  ahorroTab: "resumen",
   compareRows: [nuevaFilaComparacion(), nuevaFilaComparacion()],
 };
 
@@ -174,7 +180,7 @@ function renderView(view) {
   }
   if (view === "escanear") iniciarEscaneo();
   if (view === "listas") renderListas();
-  if (view === "historial") renderHistorial();
+  if (view === "ahorro") renderAhorro();
 }
 
 // Event delegation - manejar todos los clicks
@@ -189,6 +195,35 @@ document.addEventListener("click", (e) => {
   // Home: nueva lista
   if (e.target.closest("#homeNuevaLista")) {
     openNuevaListaSheet();
+    return;
+  }
+
+  // Ajustes
+  if (e.target.closest("#ajustesBtn")) {
+    openAjustesSheet();
+    return;
+  }
+
+  // Consejos: cada tarjeta lleva a una pantalla o agrega un producto
+  const tip = e.target.closest("[data-tip-goto], [data-tip-add]");
+  if (tip) {
+    if (tip.dataset.tipAdd) agregarSugerido(tip.dataset.tipAdd, tip);
+    else goto(tip.dataset.tipGoto);
+    return;
+  }
+
+  // Recompra sugerida
+  const sug = e.target.closest("[data-sug]");
+  if (sug) {
+    agregarSugerido(sug.dataset.sug, sug);
+    return;
+  }
+
+  // Pestañas de Ahorro
+  const tab = e.target.closest("#ahorroTabs [data-tab]");
+  if (tab) {
+    state.ahorroTab = tab.dataset.tab;
+    renderAhorro();
     return;
   }
 
@@ -237,10 +272,13 @@ function renderHome() {
       <span class="row-end" style="color:var(--ink-3)">${icon("chevron")}</span>
     </button>`;
 
+  renderHomeAhorro(listaId);
+  renderHomeRecompra(listaId);
+
   const cerradas = getHistorialListasCerradas();
   $("#homeHistorialBlock").innerHTML = cerradas.length ? `
     <p class="block-label">Última compra cerrada</p>
-    <button class="list-row" data-goto="historial">
+    <button class="list-row" data-goto="ahorro">
       <span class="row-main">
         <span class="row-title">${esc(cerradas[0].nombre)}</span>
         <span class="row-meta">${new Date(cerradas[0].cerrada_en ?? cerradas[0].creada_en).toLocaleDateString("es-EC")}</span>
@@ -249,7 +287,112 @@ function renderHome() {
     </button>` : "";
 }
 
-// Removido: ahora usa delegación de eventos arriba
+/** Precios por 100 g/ml suelen ser centavos: tres decimales cuando hace falta distinguirlos. */
+function fmtNorm(v) {
+  return v > 0 && v < 1 ? `$${v.toFixed(3)}` : fmt(v);
+}
+
+function fmtFecha(ts) {
+  return new Date(ts).toLocaleDateString("es-EC", { day: "numeric", month: "short" });
+}
+
+function pct(v) {
+  return `${v > 0 ? "+" : ""}${Math.round(v * 100)}%`;
+}
+
+const SEM_CORTO = { bueno: "Buen precio", normal: "Habitual", caro: "Caro" };
+
+/** Chip de semáforo para un precio (vacío si no hay memoria). */
+function semChip({ nombre, precio, contenido = null, unidad = null, unidades = 1 }, { largo = false } = {}) {
+  const sem = semaforoPrecio({ nombre, precio, contenido, unidad, unidades });
+  if (sem.nivel === "sin_datos") return "";
+  return `<span class="sem sem-${sem.nivel}" title="${esc(sem.texto)}">${largo ? esc(sem.texto) : SEM_CORTO[sem.nivel]}</span>`;
+}
+
+function tipCard(c) {
+  const accion = c.accion?.agregar ? `data-tip-add="${esc(c.accion.agregar)}"` : `data-tip-goto="${esc(c.accion?.goto || "ahorro")}"`;
+  return `
+    <button class="tip-card tip-${c.tipo}" ${accion}>
+      <span>
+        <span class="tip-kind">${TIP_KIND[c.tipo] || "Consejo"}</span>
+        <span class="tip-title">${esc(c.titulo)}</span>
+        <span class="tip-text">${esc(c.texto)}</span>
+      </span>
+      <span style="color:var(--ink-3)">${c.accion?.agregar ? icon("plus") : icon("chevron")}</span>
+    </button>`;
+}
+const TIP_KIND = { caro: "Está caro", tienda: "Dónde comprar", recompra: "Te toca reponer", subida: "Subió de precio", caja: "Revisa el recibo", gasto: "Tu mayor gasto", mes: "Este mes", inicio: "Para empezar" };
+
+function sugChip(sg) {
+  return `
+    <button class="sug-chip ${sg.toca ? "toca" : ""}" data-sug="${esc(sg.nombre)}" data-precio="${sg.precioRef ?? ""}" data-contenido="${sg.contenido ?? ""}" data-unidad="${sg.unidad ?? ""}">
+      <span class="sug-name">${icon("plus")} ${esc(sg.nombre)}</span>
+      <span class="sug-meta">${esc(sg.motivo)}${sg.precioRef ? ` · ~${fmt(sg.precioRef)}` : ""}</span>
+    </button>`;
+}
+
+/** Agrega a la lista activa un producto sugerido (recompra o consejo). */
+function agregarSugerido(nombre, origen) {
+  if (buscarItemSimilar(nombre)) { toast(`"${nombre}" ya está en tu lista`); return; }
+  const stats = estadisticasProducto(nombre);
+  const d = origen?.dataset || {};
+  guardarProducto({
+    nombre,
+    cantidad: 1,
+    contenido: Number(d.contenido) || null,
+    unidad_medida: d.unidad || null,
+    precio_estimado: Number(d.precio) || stats?.ultimo.precio || 0,
+    estado_precio: "estimado",
+    fuente: "sugerencia",
+  });
+  origen?.classList.add("added");
+  haptico("toque");
+  toast(`"${nombre}" agregado a "${nombreListaActiva()}"`);
+  if (state.view === "home") renderHome();
+  if (state.view === "ahorro") renderAhorro();
+}
+
+function renderHomeAhorro(listaId) {
+  const box = $("#homeAhorroBlock");
+  const r = resumenAhorro();
+  if (!r.compras && r.observaciones < 2) {
+    box.innerHTML = `
+      <div class="card" style="background:linear-gradient(145deg, var(--brand-soft), var(--surface)); border-color:var(--brand-line)">
+        <p class="title" style="font-size:16px">Tu guía de ahorro empieza con la primera compra</p>
+        <p class="caption" style="margin-top:6px">Escanea etiquetas, verifica precios y cierra tus compras. Quanto aprende lo que sueles pagar y te avisa cuándo un precio es bueno, dónde conviene comprar y qué te toca reponer.</p>
+      </div>`;
+    return;
+  }
+  const [tip] = consejos({ listaId, limite: 1 });
+  const variacion = r.variacionMes === null ? "primer mes con datos" : `${pct(r.variacionMes)} vs. mes pasado`;
+  box.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:baseline">
+      <p class="block-label">Tu ahorro</p>
+      <button class="btn-link" data-goto="ahorro" style="margin-bottom:10px">Ver todo</button>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-label">Este mes</div>
+        <div class="kpi-value tabular">${fmt(r.gastoMes)}</div>
+        <div class="kpi-sub">${esc(variacion)}</div>
+      </div>
+      <div class="kpi kpi-brand">
+        <div class="kpi-label">Ahorrado comparando</div>
+        <div class="kpi-value tabular good">${fmt(r.ahorroComparando)}</div>
+        <div class="kpi-sub">${r.comparacionesConAhorro} ${r.comparacionesConAhorro === 1 ? "comparación" : "comparaciones"} · ${r.productosEnMemoria} precios en memoria</div>
+      </div>
+    </div>
+    ${tip ? tipCard(tip) : ""}`;
+}
+
+function renderHomeRecompra(listaId) {
+  const box = $("#homeRecompraBlock");
+  const sugs = sugerenciasRecompra(listaId, { limite: 6 });
+  box.innerHTML = sugs.length ? `
+    <p class="block-label">Para volver a comprar</p>
+    <div class="chip-row">${sugs.map(sugChip).join("")}</div>
+    <p class="micro" style="margin-top:8px">Según lo que llevas en tus compras cerradas. Toca para agregar a "${esc(nombreListaActiva())}".</p>` : "";
+}
 
 // ---------------------------------------------------------------------------
 // Comparador manual
@@ -473,6 +616,7 @@ function renderResultadosComparacion() {
       <p class="title" style="margin-bottom:6px">${esc(mejor.etiqueta)}</p>
       <div class="winner-price tabular"><span id="winnerPriceValue">${fmt(mejor.normalizado)}</span> <small>${mejor.baseLabel}</small></div>
       <p class="caption" style="margin-top:6px">${fmt(mejor.precio)} · ${mejor.totalContenido} ${mejor.unidad === "unidad" ? "unidades" : mejor.unidad} en total</p>
+      ${mejor.etiqueta ? htmlMemoriaGanador(mejor) : ""}
       <div class="button-row" style="margin-top:16px">
         <button class="btn btn-tonal" id="addWinnerToList">${icon("plus")} Agregar a mi lista</button>
       </div>
@@ -523,6 +667,13 @@ function renderResultadosComparacion() {
       }
     }, 1600);
   });
+}
+
+/** En el comparador: cómo se compara el ganador con lo que ya pagaste por ese producto. */
+function htmlMemoriaGanador(mejor) {
+  const sem = semaforoPrecio({ nombre: mejor.etiqueta, precio: mejor.precio, contenido: mejor.totalContenido, unidad: mejor.unidad });
+  if (sem.nivel === "sin_datos") return "";
+  return `<p class="caption" style="margin-top:8px"><span class="sem sem-${sem.nivel}">${SEM_CORTO[sem.nivel]}</span> ${esc(sem.texto)}</p>`;
 }
 
 function nombreListaActiva() {
@@ -1325,6 +1476,7 @@ function renderScanTray() {
         <div class="sc-precio tabular">${fmt(c.precio)}</div>
         <div class="sc-meta tabular">${total ? `${total} ${unidadCorta}${norm ? ` · ${fmt(norm)}/${c.unidad === "unidad" ? "unid." : `100 ${c.unidad}`}` : ""}` : "Sin gramaje - toca para completar"}</div>
         ${c.nombre ? `<div class="sc-meta" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${c.fuente === "apple" ? "✦ " : ""}${esc(c.nombre)}</div>` : ""}
+        ${c.nombre && c.precio > 0 ? `<div style="margin-top:4px">${semChip({ nombre: c.nombre, precio: c.precio, contenido: c.contenido, unidad: c.unidad, unidades: c.unidades })}</div>` : ""}
         ${c.agregadaComo
           ? `<span class="chip chip-menos" style="margin-top:6px">✓ En tu carrito</span>`
           : enLista
@@ -1531,7 +1683,7 @@ function badgeItem(item) {
 
 function metaItem(item) {
   const partes = [`x${item.cantidad}`];
-  if (item.contenido) partes.push(`${item.contenido} ${item.unidad_medida || ""}`.trim());
+  if (item.contenido) partes.push(`${item.contenido} ${item.unidad_medida === "unidad" ? "unid." : (item.unidad_medida || "")}`.trim());
   if (item.comercio) partes.push(item.comercio);
   return partes.join(" · ");
 }
@@ -1556,11 +1708,14 @@ function renderListas() {
 
   const itemRow = (item, idx = 0) => {
     const b = badgeItem(item);
+    const precio = item.precio_verificado ?? item.precio_estimado;
+    const norm = precioNormalizado({ precio, contenido: item.contenido, unidad: item.unidad_medida });
+    const porCien = norm ? ` · ${fmtNorm(norm)}/${item.unidad_medida === "unidad" ? "u" : `100 ${item.unidad_medida}`}` : "";
     return `
       <button class="list-row ${item.estado_compra === "en_carrito" ? "strike" : ""}" data-item="${item.id}" style="--stagger:${Math.min(idx, 8) * 40}ms">
         <span class="row-main">
           <span class="row-title">${esc(item.nombre)}</span>
-          <span class="row-meta">${esc(metaItem(item))}</span>
+          <span class="row-meta">${esc(metaItem(item))}${porCien}${semChip({ nombre: item.nombre, precio, contenido: item.contenido, unidad: item.unidad_medida })}</span>
         </span>
         <span class="row-end">
           <span class="badge ${b.cls}">${b.txt}</span>
@@ -1583,6 +1738,7 @@ function renderListas() {
         <div class="t-verificado"><div class="t-label">Verificado</div><div class="t-value">${fmt(t.totalVerificado)}</div></div>
         <div class="t-facturado"><div class="t-label">Facturado</div><div class="t-value ${t.totalFacturado === null ? "pending" : ""}">${t.totalFacturado === null ? "-" : fmt(t.totalFacturado)}</div></div>
       </div>
+      ${htmlPresupuesto(activa, t, activos)}
       <p class="micro" style="margin-top:10px">El precio verificado en góndola aún puede cambiar en caja; el facturado es el definitivo.</p>
     </div>
 
@@ -1619,6 +1775,7 @@ function renderListas() {
     <p class="micro" style="margin-top:20px; text-align:center">${syncCaption()}</p>`;
 
   $("#listaOpciones").addEventListener("click", () => openOpcionesListaSheet(activa));
+  $("#fijarPresupuesto")?.addEventListener("click", () => openOpcionesListaSheet(activa, { foco: "presupuesto" }));
   $("#addItemBtn")?.addEventListener("click", () => openAddItemSheet());
   $("#emptyAddItem")?.addEventListener("click", () => openAddItemSheet());
   $("#cerrarCompraBtn")?.addEventListener("click", openCerrarCompraSheet);
@@ -1632,6 +1789,34 @@ function renderListas() {
     toast("Lista activada");
     renderListas();
   }));
+}
+
+/** Barra de presupuesto: lo que ya va en el carrito y lo estimado frente al tope. */
+function htmlPresupuesto(lista, t, activos) {
+  if (!lista?.presupuesto) {
+    return `<p class="micro" style="margin-top:12px"><button class="btn-link" id="fijarPresupuesto" style="padding:0; font-size:12.5px">Fijar un presupuesto para esta compra</button></p>`;
+  }
+  const tope = lista.presupuesto;
+  const carrito = activos.filter((i) => i.estado_compra === "en_carrito")
+    .reduce((s, i) => s + ((i.precio_facturado ?? i.precio_verificado ?? i.precio_estimado ?? 0) * (i.cantidad || 1)), 0);
+  const estimado = t.totalEstimado;
+  const ratioC = Math.min(1, carrito / tope), ratioE = Math.min(1, estimado / tope);
+  const estado = carrito > tope ? "over" : carrito > tope * 0.85 ? "warn" : "";
+  const resta = tope - carrito;
+  const nota = carrito > tope
+    ? `Te pasas por ${fmt(carrito - tope)} con lo que ya llevas.`
+    : estimado > tope
+      ? `Te quedan ${fmt(resta)}. Ojo: con todo lo de la lista llegarías a ${fmt(estimado)}, ${fmt(estimado - tope)} por encima.`
+      : `Te quedan ${fmt(resta)} · toda la lista cabe en el presupuesto.`;
+  return `
+    <div class="budget">
+      <div class="budget-head"><span>Presupuesto <strong class="tabular">${fmt(tope)}</strong></span><span>En carrito <strong class="tabular">${fmt(carrito)}</strong></span></div>
+      <div class="budget-track" role="progressbar" aria-valuemin="0" aria-valuemax="${tope}" aria-valuenow="${carrito.toFixed(2)}" aria-label="Gasto en carrito frente al presupuesto">
+        <div class="budget-fill estimado" style="width:${(ratioE * 100).toFixed(1)}%"></div>
+        <div class="budget-fill ${estado}" style="width:${(ratioC * 100).toFixed(1)}%"></div>
+      </div>
+      <p class="budget-note ${carrito > tope ? "over" : ""}">${nota}</p>
+    </div>`;
 }
 
 function openNuevaListaSheet() {
@@ -1653,14 +1838,19 @@ function openNuevaListaSheet() {
   $("#nlCancelar", sheetContent).addEventListener("click", closeSheet);
 }
 
-function openOpcionesListaSheet(lista) {
+function openOpcionesListaSheet(lista, { foco = null } = {}) {
   if (!lista) return;
   openSheet(`
     <h2 class="sheet-title">${esc(lista.nombre)}</h2>
     <p class="sheet-sub">Opciones de la lista activa.</p>
-    <div class="field"><label for="olNombre">Renombrar</label><input class="input" id="olNombre" value="${esc(lista.nombre)}"></div>
+    <div class="field"><label for="olNombre">Nombre</label><input class="input" id="olNombre" value="${esc(lista.nombre)}" autocomplete="off"></div>
+    <div class="field-grid-3" style="grid-template-columns:1fr 1fr">
+      <div class="field"><label for="olTienda">Tienda</label><input class="input" id="olTienda" value="${esc(lista.comercio_principal || "")}" placeholder="Ej. Supermaxi" autocomplete="off"></div>
+      <div class="field"><label for="olPresupuesto">Presupuesto</label><input class="input tabular" id="olPresupuesto" type="number" inputmode="decimal" step="1" min="0" value="${lista.presupuesto ?? ""}" placeholder="Sin tope" autocomplete="off"></div>
+    </div>
+    <p class="micro" style="margin:-6px 0 14px">La tienda sirve para tu memoria de precios: así sabrás dónde te sale más barato cada producto.</p>
     <div class="button-col">
-      <button class="btn btn-block" id="olGuardar">Guardar nombre</button>
+      <button class="btn btn-block" id="olGuardar">Guardar</button>
       ${esNativo() ? `<button class="btn btn-tonal btn-block" id="olRecordatorios">${icon("check")} Enviar a Recordatorios</button>
       <button class="btn btn-ghost btn-block" id="olImportar">Traer pendientes de Recordatorios</button>` : ""}
       <button class="btn btn-ghost btn-block" id="olCompartir">Compartir lista${esNativo() ? " (Notas, WhatsApp…)" : ""}</button>
@@ -1669,9 +1859,12 @@ function openOpcionesListaSheet(lista) {
     </div>`);
   $("#olGuardar", sheetContent).addEventListener("click", () => {
     const nombre = $("#olNombre", sheetContent).value.trim();
-    if (nombre) renombrarLista(lista.id, nombre);
+    if (nombre && nombre !== lista.nombre) renombrarLista(lista.id, nombre);
+    actualizarLista(lista.id, { comercio_principal: $("#olTienda", sheetContent).value.trim() || null });
+    setPresupuesto(lista.id, Number($("#olPresupuesto", sheetContent).value || 0));
     closeSheet(); renderListas();
   });
+  if (foco === "presupuesto") setTimeout(() => $("#olPresupuesto", sheetContent)?.focus(), 120);
   $("#olDuplicar", sheetContent).addEventListener("click", () => {
     duplicarLista(lista.id);
     closeSheet(); toast("Lista duplicada y activada"); renderListas();
@@ -2133,9 +2326,10 @@ function openItemSheet(item) {
     <h2 class="sheet-title">${esc(item.nombre)}</h2>
     <p class="sheet-sub">${esc(metaItem(item))} · <span class="badge ${b.cls}">${b.txt}</span></p>
 
+    ${htmlMemoriaItem(item)}
     <div class="field">
       <label for="itPrecio">Precio visto en la tienda</label>
-      <input class="input tabular" id="itPrecio" type="number" inputmode="decimal" step="0.01" min="0" value="${(item.precio_verificado ?? item.precio_estimado ?? 0).toFixed(2)}">
+      <input class="input tabular" id="itPrecio" type="number" inputmode="decimal" step="0.01" min="0" value="${(item.precio_verificado ?? item.precio_estimado ?? 0).toFixed(2)}" autocomplete="off">
       <p class="micro" style="margin-top:6px">Es el precio de góndola: puede variar en caja por promociones o errores de etiqueta.</p>
     </div>
     <div class="button-col">
@@ -2171,6 +2365,21 @@ function openItemSheet(item) {
     closeSheet(); toast("Item eliminado"); renderListas();
   });
   $("#itCancelar", sheetContent).addEventListener("click", closeSheet);
+}
+
+/** Lo que tu memoria sabe del producto, dentro de la ficha del item. */
+function htmlMemoriaItem(item) {
+  const precio = item.precio_verificado ?? item.precio_estimado;
+  const sem = semaforoPrecio({ nombre: item.nombre, precio, contenido: item.contenido, unidad: item.unidad_medida });
+  const st = sem.stats;
+  if (!st) return `<p class="micro" style="margin:-6px 0 14px">Aún no tienes precios guardados de este producto: en cuanto lo verifiques o lo escanees, Quanto lo recordará.</p>`;
+  const donde = (o) => `${fmt(o.precio)}${o.tienda ? ` en ${esc(o.tienda)}` : ""} (${fmtFecha(o.fecha)})`;
+  return `
+    <div class="card" style="margin:-6px 0 14px; padding:12px 14px">
+      <p class="micro" style="margin-bottom:4px">Tu memoria · ${st.n} ${st.n === 1 ? "precio visto" : "precios vistos"}</p>
+      <p class="caption">Último: <strong>${donde(st.ultimo)}</strong> · Mínimo: <strong>${donde(st.minimo)}</strong></p>
+      ${sem.nivel !== "sin_datos" ? `<p style="margin-top:8px"><span class="sem sem-${sem.nivel}">${SEM_CORTO[sem.nivel]}</span> <span class="caption">${esc(sem.texto)}</span></p>` : ""}
+    </div>`;
 }
 
 // ----------------------------- Cerrar compra --------------------------------
@@ -2302,23 +2511,181 @@ function mostrarResultadoCierre(lista, detalle) {
     <div class="button-col" style="margin-top:20px">
       <button class="btn btn-block" id="rcListo">Listo</button>
     </div>`);
-  $("#rcListo", sheetContent).addEventListener("click", () => { closeSheet(); goto("historial"); });
+  $("#rcListo", sheetContent).addEventListener("click", () => { closeSheet(); goto("ahorro"); });
 }
 
 // ---------------------------------------------------------------------------
 // Historial
 // ---------------------------------------------------------------------------
 
-function renderHistorial() {
+function renderAhorro() {
+  $$("#ahorroTabs [data-tab]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tab === state.ahorroTab)));
+  const cont = $("#ahorroContainer");
+  if (state.ahorroTab === "precios") { cont.innerHTML = htmlPrecios(""); conectarPrecios(cont); return; }
+  if (state.ahorroTab === "compras") { cont.innerHTML = htmlCompras(); return; }
+  cont.innerHTML = htmlResumen();
+  pedirConsejoCoach(cont);
+}
+
+function htmlResumen() {
+  const r = resumenAhorro();
+  const listaId = getListaActivaId();
+  if (!r.compras && r.observaciones < 2) {
+    return `
+      <div class="empty-state">
+        <p>Aquí verás cuánto gastas, cuánto ahorras y qué precios conviene aprovechar. Todo sale de tus propias compras.</p>
+        <button class="btn btn-tonal" data-goto="escanear">Escanear una etiqueta</button>
+      </div>`;
+  }
+  const tips = consejos({ listaId, limite: 5 });
+  const sugs = sugerenciasRecompra(listaId, { limite: 6 });
+  const tiendas = r.tiendas.filter((t) => t.compara >= 1);
+  const variacion = r.variacionMes === null ? "sin mes anterior" : `${pct(r.variacionMes)} vs. ${fmt(r.gastoAnterior)} el mes pasado`;
+  const caja = r.menosQueVerificado - r.masQueVerificado;
+  return `
+    <div class="kpi-grid">
+      <div class="kpi"><div class="kpi-label">Este mes</div><div class="kpi-value tabular">${fmt(r.gastoMes)}</div><div class="kpi-sub">${r.comprasMes} ${r.comprasMes === 1 ? "compra" : "compras"} · ${esc(variacion)}</div></div>
+      <div class="kpi"><div class="kpi-label">Ticket promedio</div><div class="kpi-value tabular">${fmt(r.ticketPromedio)}</div><div class="kpi-sub">${r.compras} compras cerradas</div></div>
+      <div class="kpi kpi-brand"><div class="kpi-label">Ahorrado comparando</div><div class="kpi-value tabular good">${fmt(r.ahorroComparando)}</div><div class="kpi-sub">por elegir la mejor opción en ${r.comparacionesConAhorro} ${r.comparacionesConAhorro === 1 ? "comparación" : "comparaciones"}</div></div>
+      <div class="kpi"><div class="kpi-label">Góndola vs. caja</div><div class="kpi-value tabular ${caja >= 0 ? "good" : "bad"}">${caja >= 0 ? "" : "−"}${fmt(Math.abs(caja))}</div><div class="kpi-sub">${caja >= 0 ? "pagaste menos de lo verificado" : "pagaste más de lo verificado"}</div></div>
+    </div>
+    <div id="coachBox"></div>
+
+    ${tips.length ? `<p class="block-label" style="margin-top:22px">Para ti</p>${tips.map(tipCard).join("")}` : ""}
+
+    ${sugs.length ? `
+      <p class="block-label" style="margin-top:22px">Te toca reponer</p>
+      <div class="chip-row">${sugs.map(sugChip).join("")}</div>` : ""}
+
+    ${tiendas.length ? `
+      <p class="block-label" style="margin-top:22px">Dónde compras más barato</p>
+      <div class="card">
+        ${tiendas.map((t) => `
+          <div class="store-row" style="display:block">
+            <div style="display:flex; justify-content:space-between; gap:10px"><strong>${esc(t.tienda)}</strong><span class="caption tabular">gana en ${t.gana} de ${t.compara}</span></div>
+            <div class="store-bar" style="width:${Math.max(4, Math.round(t.ratio * 100))}%; opacity:${t.ratio ? 1 : .25}"></div>
+            ${t.ejemplos.length ? `<p class="micro" style="margin-top:6px">${t.ejemplos.map((e) => `${esc(e.nombre)} ${e.pct}% menos que en ${esc(e.vs)}`).join(" · ")}</p>` : ""}
+          </div>`).join("")}
+        <p class="micro" style="margin-top:10px">Solo cuenta productos que viste en dos o más tiendas. Pon la tienda en cada lista (⋯) para alimentar esto.</p>
+      </div>` : ""}
+
+    ${r.topGasto.length ? `
+      <p class="block-label" style="margin-top:22px">En qué se te va (90 días)</p>
+      <div class="card">
+        ${r.topGasto.map((e) => `
+          <div class="top-row">
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${esc(e.nombre)}</span>
+            <span class="tabular"><strong>${fmt(e.gasto)}</strong> <span class="micro">${Math.round(e.pct * 100)}%</span></span>
+            <div class="top-track"><span style="width:${Math.round(e.pct * 100)}%"></span></div>
+          </div>`).join("")}
+      </div>` : ""}
+
+    ${r.frecuentes.length ? `
+      <p class="block-label" style="margin-top:22px">Lo que más compras</p>
+      <div class="card">
+        ${r.frecuentes.map((f) => `
+          <div class="hist-row">
+            <span>${esc(f.nombre)}<br><span class="hist-meta">${f.veces} compras${f.intervaloDias ? ` · cada ${f.intervaloDias} días` : ""} · última hace ${f.diasDesde} d</span></span>
+            <span class="tabular" style="text-align:right">${fmt(f.gasto)}<br><span class="hist-meta">${f.cantidad} unid.</span></span>
+          </div>`).join("")}
+      </div>` : ""}`;
+}
+
+/** Apple Intelligence redacta el consejo de la semana a partir de los números reales. */
+async function pedirConsejoCoach(cont) {
+  const box = $("#coachBox", cont);
+  if (!box || !esNativo()) return;
+  const caps = await capacidades();
+  if (!caps.appleIntelligence) return;
+  box.innerHTML = `<p class="ia-nota">✦ Tu coach está mirando tus números…</p>`;
+  const r = await redactarConsejo(resumenParaCoach({ listaId: getListaActivaId() }));
+  if (!document.body.contains(box)) return;
+  box.innerHTML = r ? `<p class="ia-nota">✦ ${r.titulo ? `<strong>${esc(r.titulo)}</strong> ` : ""}${esc(r.consejo)}</p>` : "";
+}
+
+function sparkline(serie) {
+  const vals = serie.slice(-10).map((o) => o.valor);
+  if (vals.length < 2) return "";
+  const min = Math.min(...vals), max = Math.max(...vals), rango = max - min || 1;
+  const w = 64, h = 26, pad = 3;
+  const pts = vals.map((v, i) => [pad + (i * (w - pad * 2)) / (vals.length - 1), h - pad - ((v - min) / rango) * (h - pad * 2)]);
+  const [lx, ly] = pts[pts.length - 1];
+  return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}"/><circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.2"/></svg>`;
+}
+
+function htmlPrecios(filtro) {
+  const todos = productosConMemoria();
+  const q = normalizarNombre(filtro);
+  const lista = q ? todos.filter((s) => normalizarNombre(s.nombre).includes(q)) : todos;
+  const filas = lista.map((s) => {
+    const flecha = s.tendencia > 0 ? `<span class="trend-up">↑</span>` : s.tendencia < 0 ? `<span class="trend-down">↓</span>` : `<span class="trend-flat">→</span>`;
+    const bajoMinimo = s.ultimo.valor <= s.minimo.valor * 1.01 && s.n > 1;
+    return `
+      <button class="price-row" data-clave="${esc(s.clave)}">
+        <span style="min-width:0">
+          <span class="pr-name">${esc(s.nombre)}</span>
+          <span class="pr-meta">${s.ultimo.tienda ? `${esc(s.ultimo.tienda)} · ` : ""}${fmtFecha(s.ultimo.fecha)} · ${s.n} ${s.n === 1 ? "precio" : "precios"}${bajoMinimo ? ` · <span class="trend-down">en su mínimo</span>` : s.minimo.tienda && s.minimo.valor < s.ultimo.valor * 0.97 ? ` · mín. ${fmtNorm(s.minimo.valor)} en ${esc(s.minimo.tienda)}` : ""}</span>
+        </span>
+        <span class="pr-end">
+          ${sparkline(s.serie)}
+          <span style="text-align:right"><span class="pr-value tabular">${fmtNorm(s.ultimo.valor)} ${flecha}</span><br><span class="micro">${esc(s.base)}</span></span>
+        </span>
+      </button>`;
+  }).join("");
+  return `
+    <div class="field" style="margin-bottom:12px"><input class="input" id="precioBuscar" type="search" placeholder="Buscar producto…" value="${esc(filtro)}" autocomplete="off" aria-label="Buscar en tu memoria de precios"></div>
+    ${todos.length ? "" : `<div class="empty-state"><p>Todavía no hay precios guardados. Se llenan solos cuando escaneas etiquetas, verificas precios en tienda o cierras compras.</p><button class="btn btn-tonal" data-goto="escanear">Escanear una etiqueta</button></div>`}
+    ${todos.length && !lista.length ? `<p class="caption">Nada coincide con "${esc(filtro)}".</p>` : ""}
+    <div id="preciosLista">${filas}</div>
+    ${todos.length ? `<p class="micro" style="margin-top:12px; text-align:center">${todos.length} productos · precio por 100 g/ml o por envase, según lo que sepa de cada uno.</p>` : ""}`;
+}
+
+function conectarPrecios(cont) {
+  const input = $("#precioBuscar", cont);
+  input?.addEventListener("input", () => {
+    const pos = input.selectionStart;
+    cont.innerHTML = htmlPrecios(input.value);
+    conectarPrecios(cont);
+    const nuevo = $("#precioBuscar", cont);
+    nuevo.focus();
+    nuevo.setSelectionRange(pos, pos);
+  });
+  $$("[data-clave]", cont).forEach((b) => b.addEventListener("click", () => {
+    const st = productosConMemoria().find((s) => s.clave === b.dataset.clave);
+    if (st) openPrecioSheet(st);
+  }));
+}
+
+function openPrecioSheet(st) {
+  const serie = [...st.serie].reverse().slice(0, 12);
+  openSheet(`
+    <h2 class="sheet-title">${esc(st.nombre)}</h2>
+    <p class="sheet-sub">${st.n} ${st.n === 1 ? "precio visto" : "precios vistos"} · ${esc(st.base)}</p>
+    <div class="kpi-grid" style="margin-bottom:14px">
+      <div class="kpi"><div class="kpi-label">Último</div><div class="kpi-value tabular">${fmtNorm(st.ultimo.valor)}</div><div class="kpi-sub">${st.ultimo.tienda ? `${esc(st.ultimo.tienda)} · ` : ""}${fmtFecha(st.ultimo.fecha)}</div></div>
+      <div class="kpi"><div class="kpi-label">Mínimo</div><div class="kpi-value tabular good">${fmtNorm(st.minimo.valor)}</div><div class="kpi-sub">${st.minimo.tienda ? `${esc(st.minimo.tienda)} · ` : ""}${fmtFecha(st.minimo.fecha)}</div></div>
+    </div>
+    <p class="caption" style="margin-bottom:12px">Tu precio habitual: <strong class="tabular">${fmtNorm(st.habitual)}</strong> ${esc(st.base)}${st.tiendas.length > 1 ? ` · más barato en <strong>${esc(st.tiendas[0].tienda)}</strong>` : ""}</p>
+    ${st.tiendas.length ? `<div class="card" style="margin-bottom:12px">${st.tiendas.map((t) => `<div class="hist-row"><span>${esc(t.tienda)}<br><span class="hist-meta">${t.n} ${t.n === 1 ? "precio" : "precios"}</span></span><span class="tabular">${fmtNorm(t.mediana)}</span></div>`).join("")}</div>` : ""}
+    <div class="card">
+      ${serie.map((o) => `<div class="hist-row"><span>${fmtFecha(o.fecha)}<br><span class="hist-meta">${esc(o.tienda || "sin tienda")} · ${esc(o.fuente)}</span></span><span class="tabular">${fmtNorm(o.valor)}<br><span class="hist-meta">${fmt(o.precio)} envase</span></span></div>`).join("")}
+    </div>
+    <div class="button-col" style="margin-top:14px">
+      <button class="btn btn-tonal btn-block" id="phAgregar">${icon("plus")} Agregar a mi lista</button>
+      <button class="btn btn-quiet" id="phCerrar">Cerrar</button>
+    </div>`);
+  $("#phAgregar", sheetContent).addEventListener("click", () => { closeSheet(); agregarSugerido(st.nombre); });
+  $("#phCerrar", sheetContent).addEventListener("click", closeSheet);
+}
+
+function htmlCompras() {
   const cerradas = getHistorialListasCerradas();
-  const cont = $("#historialContainer");
   if (!cerradas.length) {
-    cont.innerHTML = `
+    return `
       <div class="empty-state">
         <p>Cuando cierres una compra aparecerá aquí, con lo que pagaste de verdad.</p>
         <button class="btn btn-tonal" data-goto="listas">Ir a mi lista</button>
       </div>`;
-    return;
   }
 
   const ultimas = cerradas.slice(0, 8).reverse();
@@ -2335,19 +2702,79 @@ function renderHistorial() {
       </div>
     </div>` : "";
 
-  cont.innerHTML = barras + cerradas.map((l, i) => {
+  return barras + cerradas.map((l, i) => {
     const dif = l.diferencia_vs_verificado ?? 0;
     const menos = dif <= 0;
+    const n = getLista(l.id).filter((it) => it.estado_compra !== "aplazado").length;
     return `
       <div class="list-row" style="cursor:default; --stagger:${Math.min(i, 8) * 40}ms">
         <span class="row-main">
           <span class="row-title">${esc(l.nombre)}</span>
-          <span class="row-meta">${new Date(l.cerrada_en ?? l.creada_en).toLocaleDateString("es-EC")}</span>
+          <span class="row-meta">${new Date(l.cerrada_en ?? l.creada_en).toLocaleDateString("es-EC")}${l.comercio_principal ? ` · ${esc(l.comercio_principal)}` : ""} · ${n} ${n === 1 ? "item" : "items"}</span>
           <span class="chip ${menos ? "chip-menos" : "chip-mas"}" style="margin-top:6px">${menos ? `${fmt(Math.abs(dif))} menos de lo esperado` : `${fmt(dif)} más de lo esperado`}</span>
         </span>
         <span class="row-end item-price facturado tabular">${fmt(l.total_facturado_final)}</span>
       </div>`;
   }).join("");
+}
+
+// ---------------------------------------------------------------------------
+// Ajustes
+// ---------------------------------------------------------------------------
+
+function openAjustesSheet() {
+  const a = getAjustes();
+  const d = exportarDatos();
+  openSheet(`
+    <h2 class="sheet-title">Ajustes</h2>
+    <p class="sheet-sub">Todo se guarda en este dispositivo. ${d.items.length} items, ${d.listas.length} listas y ${d.precios.length} precios en memoria.</p>
+    <div class="field"><label for="ajTienda">Tienda habitual</label><input class="input" id="ajTienda" value="${esc(a.tienda_habitual || "")}" placeholder="Ej. Supermaxi" autocomplete="off"><p class="micro" style="margin-top:6px">Se usa cuando una lista no tiene tienda, para saber dónde viste cada precio.</p></div>
+    <div class="field"><label for="ajPresupuesto">Presupuesto por defecto para listas nuevas</label><input class="input tabular" id="ajPresupuesto" type="number" inputmode="decimal" step="1" min="0" value="${a.presupuesto_defecto ?? ""}" placeholder="Sin tope" autocomplete="off"></div>
+    <div class="button-col">
+      <button class="btn btn-block" id="ajGuardar">Guardar</button>
+      ${esNativo() ? "" : `<button class="btn btn-ghost btn-block" id="ajLector">Lector IA (Worker)</button>`}
+      <button class="btn btn-ghost btn-block" id="ajExportar">${esNativo() ? "Compartir copia de seguridad" : "Descargar copia de seguridad"}</button>
+      <label class="btn btn-ghost btn-block" style="cursor:pointer">Restaurar copia…<input type="file" id="ajImportar" accept="application/json,.json" hidden></label>
+      <div class="seg" role="group" aria-label="Modo de restauración"><button id="ajModoFusionar" aria-pressed="true">Añadir a lo que hay</button><button id="ajModoReemplazar" aria-pressed="false">Reemplazar todo</button></div>
+      <button class="btn btn-quiet" id="ajCerrar">Cerrar</button>
+    </div>`);
+  let modo = "fusionar";
+  const setModo = (m) => {
+    modo = m;
+    $("#ajModoFusionar", sheetContent).setAttribute("aria-pressed", String(m === "fusionar"));
+    $("#ajModoReemplazar", sheetContent).setAttribute("aria-pressed", String(m === "reemplazar"));
+  };
+  $("#ajModoFusionar", sheetContent).addEventListener("click", () => setModo("fusionar"));
+  $("#ajModoReemplazar", sheetContent).addEventListener("click", () => setModo("reemplazar"));
+  $("#ajGuardar", sheetContent).addEventListener("click", () => {
+    setAjustes({ tienda_habitual: $("#ajTienda", sheetContent).value.trim(), presupuesto_defecto: Number($("#ajPresupuesto", sheetContent).value || 0) || null });
+    closeSheet(); toast("Ajustes guardados"); renderView(state.view);
+  });
+  $("#ajLector", sheetContent)?.addEventListener("click", () => { closeSheet(); openLectorSheet(); });
+  $("#ajExportar", sheetContent).addEventListener("click", async () => {
+    const json = JSON.stringify(exportarDatos(), null, 0);
+    const nombre = `quanto-copia-${new Date().toISOString().slice(0, 10)}.json`;
+    if (esNativo()) { await compartir(json, nombre); return; }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast("Copia descargada");
+  });
+  $("#ajImportar", sheetContent).addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const r = importarDatos(await file.text(), modo);
+      closeSheet();
+      toast(`Copia restaurada: ${r.items} items, ${r.precios} precios`);
+      renderView(state.view);
+    } catch {
+      toast("Ese archivo no es una copia de Quanto.");
+    }
+  });
+  $("#ajCerrar", sheetContent).addEventListener("click", closeSheet);
 }
 
 // ---------------------------------------------------------------------------
@@ -2364,5 +2791,5 @@ goto("home");
 // Hook de depuración solo en desarrollo local: permite simular capturas
 // del escáner sin cámara (QA del veredicto, duplicados y carrito).
 if (["localhost", "127.0.0.1"].includes(location.hostname)) {
-  window.__quanto = { scanSession, agregarCaptura, renderScanTray, buscarItemSimilar, veredictoEscaner };
+  window.__quanto = { scanSession, agregarCaptura, renderScanTray, buscarItemSimilar, veredictoEscaner, importarDatos };
 }

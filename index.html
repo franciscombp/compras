@@ -36,6 +36,8 @@ if ('serviceWorker' in navigator) {
     <g id="i-chevron"><path d="m9.5 5.5 6.5 6.5-6.5 6.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
     <g id="i-mic"><rect x="9" y="3.5" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g>
     <g id="i-check"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <g id="i-trend"><path d="M4 16.5 9.5 11l3.5 3.5 7-7.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 7h4.5v4.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <g id="i-sliders"><path d="M4 7h10M18 7h2M4 12h3M11 12h9M4 17h12M20 17h0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></g>
     <g id="i-alert"><path d="M12 4 2.8 19.5h18.4L12 4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 10v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17" r="1" fill="currentColor"/></g>
   </defs>
 </svg>
@@ -45,10 +47,13 @@ if ('serviceWorker' in navigator) {
   <!-- ============================ Inicio ============================ -->
   <section class="screen" id="view-home">
     <header class="screen-head">
+      <button class="icon-btn head-action" id="ajustesBtn" aria-label="Ajustes"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sliders"/></svg></button>
       <p class="kicker">Quanto</p>
       <h1 class="display">El precio justo,<br>sin trucos.</h1>
-      <p class="lede">Compara lo que de verdad cuesta cada producto y lleva tus listas de compra con memoria de precios.</p>
+      <p class="lede">Compara lo que de verdad cuesta cada producto y compra mejor con tu propia memoria de precios.</p>
     </header>
+
+    <div class="block" id="homeAhorroBlock"></div>
 
     <div class="block">
       <p class="block-label">Comparar</p>
@@ -81,6 +86,8 @@ if ('serviceWorker' in navigator) {
         <button class="btn btn-quiet" data-goto="listas">Ver todas</button>
       </div>
     </div>
+
+    <div class="block" id="homeRecompraBlock"></div>
 
     <div class="block" id="homeHistorialBlock"></div>
   </section>
@@ -133,13 +140,18 @@ if ('serviceWorker' in navigator) {
     <div id="listasContainer"></div>
   </section>
 
-  <!-- ============================ Historial ========================= -->
-  <section class="screen" id="view-historial">
+  <!-- ============================= Ahorro =========================== -->
+  <section class="screen" id="view-ahorro">
     <header class="screen-head">
-      <p class="kicker">Historial</p>
-      <h1 class="display" style="font-size:26px">Compras cerradas</h1>
+      <p class="kicker">Ahorro</p>
+      <h1 class="display" style="font-size:26px">Compra mejor cada vez</h1>
     </header>
-    <div id="historialContainer"></div>
+    <div class="seg" role="tablist" aria-label="Secciones de ahorro" id="ahorroTabs">
+      <button role="tab" data-tab="resumen" aria-pressed="true">Resumen</button>
+      <button role="tab" data-tab="precios" aria-pressed="false">Precios</button>
+      <button role="tab" data-tab="compras" aria-pressed="false">Compras</button>
+    </div>
+    <div id="ahorroContainer" style="margin-top:16px"></div>
   </section>
 
 </main>
@@ -163,8 +175,8 @@ if ('serviceWorker' in navigator) {
   <button class="nav-item" data-goto="listas" aria-label="Listas de compra">
     <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>Listas
   </button>
-  <button class="nav-item" data-goto="historial" aria-label="Historial de compras">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg>Historial
+  <button class="nav-item" data-goto="ahorro" aria-label="Ahorro y precios">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-trend"/></svg>Ahorro
   </button>
 </nav>
 

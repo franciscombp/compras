@@ -121,6 +121,28 @@ export async function explicarComparacion(resumen) {
   return promesa;
 }
 
+const consejosIA = new Map();
+/**
+ * Consejo semanal redactado por Apple Intelligence a partir del resumen de
+ * data/ahorro.js. Cacheado por texto. Devuelve { titulo, consejo } o null.
+ */
+export async function redactarConsejo(resumen) {
+  const p = plugin();
+  if (!p || !resumen) return null;
+  if (consejosIA.has(resumen)) return consejosIA.get(resumen);
+  const promesa = (async () => {
+    try {
+      const r = await p.redactarConsejo({ resumen });
+      if (!r || r.ia === null || !r.consejo) return null;
+      return { titulo: String(r.titulo || "").trim(), consejo: String(r.consejo).trim() };
+    } catch {
+      return null;
+    }
+  })();
+  consejosIA.set(resumen, promesa);
+  return promesa;
+}
+
 /** Vibración corta: "exito" | "aviso" | "toque". En web no hace nada. */
 export function haptico(tipo = "toque") {
   plugin()?.haptico({ tipo }).catch(() => {});

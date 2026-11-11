@@ -12,6 +12,7 @@ import UIKit
 ///   interpretarEtiqueta({ texto })      -> datos de la etiqueta | { ia: null }
 ///   interpretarProducto({ frase })      -> { nombre, cantidad, precio, contenido, unidad } | { ia: null }
 ///   explicarComparacion({ resumen })    -> { titulo, explicacion } | { ia: null }
+///   redactarConsejo({ resumen })        -> { titulo, consejo } | { ia: null }
 ///   haptico({ tipo })                   -> tipo: "exito" | "aviso" | "toque"
 ///   mantenerPantalla({ activo })
 ///   exportarRecordatorios({ lista, items: [{ nombre, nota }] }) -> { creados, omitidos }
@@ -27,6 +28,7 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "interpretarEtiqueta", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "interpretarProducto", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "explicarComparacion", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "redactarConsejo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "haptico", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "mantenerPantalla", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "exportarRecordatorios", returnType: CAPPluginReturnPromise),
@@ -136,6 +138,22 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
             do {
                 if let v = try await AppleIA.veredicto(resumen: resumen) {
                     call.resolve(v)
+                } else {
+                    call.resolve(["ia": NSNull()])
+                }
+            } catch {
+                call.reject("ia: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    @objc func redactarConsejo(_ call: CAPPluginCall) {
+        let resumen = (call.getString("resumen") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !resumen.isEmpty else { call.reject("resumen_vacio"); return }
+        Task {
+            do {
+                if let c = try await AppleIA.consejo(resumen: resumen) {
+                    call.resolve(c)
                 } else {
                     call.resolve(["ia": NSNull()])
                 }
