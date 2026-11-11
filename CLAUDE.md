@@ -56,6 +56,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 ├── assets/
 │   ├── app.js             # UI logic, event delegation, render functions (1800+ lines)
 │   ├── ocr.js             # Shared OCR module: image preprocessing + label parser
+│   ├── vivo.js            # Live sweep logic: cluster OCR lines into price tags, track them across frames (pure, tested)
 │   ├── utils.js           # Shared utilities (DOM, format, UI helpers)
 │   ├── tokens.css         # Design system (colors, typography, layout)
 │   └── sw.js              # Service Worker (network-first caching)
@@ -67,13 +68,14 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 ├── lab/                   # Internal tools (NOT linked from the app)
 │   ├── etiquetas.html     # Label-testing page: upload photos, see OCR + parse results
 │   ├── parser-test.mjs    # Parser unit tests: node lab/parser-test.mjs
+│   ├── vivo-test.mjs      # Live sweep tests: node lab/vivo-test.mjs
 │   └── fetch-catalogo.mjs # Catalog fetcher (runs in weekly GitHub Action)
 ├── worker/                # Optional Cloudflare Worker: label reader with Claude (see worker/README.md)
 │   ├── src/index.js       # POST {imagen, tipo} -> {precio, contenido, unidad, unidades, nombre, confianza}
 │   └── wrangler.toml      # ORIGENES_PERMITIDOS, MODELO; secrets: ANTHROPIC_API_KEY, LECTOR_TOKEN
 ├── native/                # Optional iOS wrapper: Capacitor + Vision + Apple Intelligence (see native/README.md)
 │   ├── scripts/build-web.mjs       # copies the PWA to native/dist (no Service Worker)
-│   └── ios/App/App/*.swift         # QuantoNativoPlugin (bridge), LectorEtiqueta (Vision OCR + barcode), AppleIA (Foundation Models)
+│   └── ios/App/App/*.swift         # QuantoNativoPlugin (bridge), LectorEtiqueta (Vision OCR + barcode), AppleIA (Foundation Models), Recordatorios (EventKit)
 ├── .github/workflows/
 │   └── actualizar-catalogo.yml  # Weekly cron (Mon 09:00 UTC) + manual dispatch
 └── docs/                  # Documentation
@@ -118,7 +120,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 - Stubs for phase 2: `compareOnline(productos)`, `syncData(items)`
 
 **5b. Native bridge** (`data/nativo.js`)
-- Single entry point to the device. `esNativo()`, `capacidades()` (cached: vision, codigoBarras, appleIntelligence, plataforma), `leerEtiquetaNativa(canvas, {rapido})`, `interpretarProducto(frase)`, `explicarComparacion(resumen)` (cached by text), `haptico(tipo)`, `mantenerPantalla(activo)`
+- Single entry point to the device. `esNativo()`, `capacidades()` (cached: vision, codigoBarras, barrido, recordatorios, compartir, appleIntelligence, plataforma), `leerEtiquetaNativa(canvas, {rapido, nivelRapido, ladoMax})`, `interpretarEtiqueta(texto)`, `interpretarProducto(frase)`, `explicarComparacion(resumen)` (cached by text), `haptico(tipo)`, `mantenerPantalla(activo)`, `exportarRecordatorios(lista, items)`, `importarRecordatorios(lista)`, `compartir(texto, titulo)` (native sheet, else `navigator.share`, else clipboard)
 - On the web every function returns `null`/`false` and `app.js` falls back to local logic. Android would implement the same Capacitor plugin name and methods
 - `app.js` adds `html.nativo` at startup; `tokens.css` uses it for native-only tweaks. Anything written by Apple Intelligence is shown with a leading ✦ (`.ia-nota`)
 
@@ -145,6 +147,11 @@ Event delegation handles:
 
 ### Comparador OCR (Camera Comparison)
 
+Two modes on the camera screen, chosen with the chips on the stage and remembered in localStorage (`quanto.scan_modo`):
+
+- **Barrido** (native only, default there): `cicloBarrido()` sends full frames to Vision every ~100 ms with `ia: false`; `agruparEtiquetas()` in `vivo.js` clusters the OCR lines into price tags and parses each; `Seguimiento` tracks them across frames and confirms a tag on its 2nd sighting; confirmed tags enter `scanSession.capturas` once (`incorporarPista`) with a cropped thumbnail, then `refinarConIA()` asks Apple Intelligence to reread that tag's text (name, content, pack; never the price; skipped if the user edited the capture). `dibujarOverlay()` draws boxes and price-per-100 chips on `#scanOverlay`, best in green; tapping a box confirms it immediately or opens `openCapturaSheet`. Pause chip stops the loop; the tray and verdict below are the same as in capture mode.
+- **Captura** (manual button, plus optional Auto):
+
 1. User captures product label
 2. `leerDatosEtiqueta(canvas)` in `app.js` picks the reader:
    - **Native** (only inside the Capacitor app, via `data/nativo.js`): Vision OCR returns text plus per-word boxes and any barcode; if the device has Apple Intelligence the plugin also returns an `ia` interpretation (fuente `apple`), otherwise `parseEtiqueta` runs on the Vision text (fuente `vision`). With a barcode, `completarPorCodigo()` fills missing name/content from `searchByBarcode()` (price always comes from the label)
@@ -154,6 +161,8 @@ Event delegation handles:
 4. Results show ranking; when native with Apple Intelligence, `explicarVeredicto()` appends a short natural-language explanation (`.ia-nota`) after the comparison settles (700 ms debounce, cached per summary)
 
 ### Listas (Shopping Lists)
+
+List options (⋯) also offer: **Enviar a Recordatorios** / **Traer pendientes de Recordatorios** (native only, EventKit via `nativo.js`; items import with `fuente: "recordatorios"`, duplicates unchecked by `buscarItemSimilar`) and **Compartir lista** (`textoLista()` → native share sheet, `navigator.share` or clipboard).
 
 1. Create new list (with optional store name)
 2. Add items manually (5-step wizard in `openAddItemSheet`) or from comparador. In the wizard, leaving the name step with a phrase that contains numbers calls `interpretarProducto()` (Apple Intelligence) and prefills price, quantity and content; the summary step re-renders from `wizard.datos`

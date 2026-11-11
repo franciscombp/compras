@@ -16,7 +16,8 @@ import {
 } from "../data/store.js";
 import { parseNumero, parseLectura, parseEtiqueta, extraerPistas, extraerMedidaDeNombre, preprocesarEtiqueta } from "./ocr.js";
 import { services, getLectorConfig, setLectorConfig, lectorDisponible } from "../data/api.js";
-import { esNativo, capacidades, leerEtiquetaNativa, interpretarProducto, explicarComparacion, haptico, mantenerPantalla } from "../data/nativo.js";
+import { esNativo, capacidades, leerEtiquetaNativa, interpretarEtiqueta, interpretarProducto, explicarComparacion, haptico, mantenerPantalla, exportarRecordatorios, importarRecordatorios, compartir } from "../data/nativo.js";
+import { agruparEtiquetas, Seguimiento, mapearCaja, normalizadoDe } from "./vivo.js";
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -543,8 +544,33 @@ let ocrWorkerPromise = null;
  * agregarse al carrito o descartarse. La sesión sobrevive al cambio de
  * vista (puedes ir a Listas y volver) hasta que el usuario la termina.
  */
-const scanSession = { capturas: [], auto: false };
+const scanSession = { capturas: [], auto: false, modo: null };
 let scanSeq = 0;
+
+/**
+ * Barrido en vivo (solo en la app nativa): Vision analiza el estante en
+ * continuo, assets/vivo.js agrupa y sigue cada etiqueta, y las confirmadas
+ * entran solas en la sesión. Apple Intelligence refina cada una después.
+ */
+const barrido = {
+  seguimiento: new Seguimiento({ confirmarTras: 2, olvidarMs: 1500 }),
+  timer: null, ocupado: false, pausado: false, frame: null, cajas: [],
+  lentos: 0, fallos: 0, nivelRapido: false, statusTimer: null,
+};
+
+function modoEscaneo() {
+  if (!esNativo()) return "captura";
+  if (scanSession.modo) return scanSession.modo;
+  let guardado = null;
+  try { guardado = localStorage.getItem("quanto.scan_modo"); } catch { /* sin storage */ }
+  return guardado === "captura" ? "captura" : "barrido";
+}
+
+function setModoEscaneo(modo) {
+  scanSession.modo = modo;
+  try { localStorage.setItem("quanto.scan_modo", modo); } catch { /* sin storage */ }
+  iniciarEscaneo();
+}
 let autoTimer = null;
 let autoOcupado = false;
 let autoLentos = 0;
@@ -554,6 +580,8 @@ let autoCooldownHasta = 0;
 function detenerCamara() {
   clearTimeout(autoTimer);
   autoTimer = null;
+  clearTimeout(barrido.timer);
+  barrido.timer = null;
   mantenerPantalla(false);
   if (camaraStream) {
     camaraStream.getTracks().forEach((t) => t.stop());
@@ -788,14 +816,31 @@ async function iniciarEscaneo() {
   const soporte = soporteCamara();
   if (soporte !== "ok") { renderProblemaCamara(soporte); return; }
 
-  $("#scanStage").innerHTML = `
+  const modo = modoEscaneo();
+  const selectorModo = esNativo() ? `
+      <div class="modo-switch" role="tablist" aria-label="Modo de escaneo">
+        <button class="stage-chip ${modo === "barrido" ? "on" : ""}" role="tab" aria-selected="${modo === "barrido"}" data-modo="barrido">Barrido ✦</button>
+        <button class="stage-chip ${modo === "captura" ? "on" : ""}" role="tab" aria-selected="${modo === "captura"}" data-modo="captura">Captura</button>
+      </div>` : "";
+  $("#scanStage").innerHTML = modo === "barrido" ? `
+    <div class="camera-stage barrido">
+      <video id="scanVideo" autoplay playsinline muted></video>
+      <canvas class="scan-overlay" id="scanOverlay" aria-label="Etiquetas detectadas"></canvas>
+      <div class="stage-top">${selectorModo}<button class="auto-chip" id="barridoPausa" aria-pressed="false">Pausa</button></div>
+      <div class="camera-status" id="scanStatus" aria-live="polite">Pidiendo permiso de cámara…</div>
+    </div>
+    <p class="caption barrido-hint">Pasea la cámara por el estante: cada etiqueta de precio se agrega sola y el ganador se marca en verde. Toca una etiqueta para agregarla ya o revisarla.</p>` : `
     <div class="camera-stage">
       <video id="scanVideo" autoplay playsinline muted></video>
       <div class="camera-frame" aria-hidden="true"></div>
-      <button class="auto-chip" id="autoChip" aria-pressed="false" title="Captura sola cuando la lectura es estable">Auto</button>
+      <div class="stage-top">${selectorModo}<button class="auto-chip" id="autoChip" aria-pressed="false" title="Captura sola cuando la lectura es estable">Auto</button></div>
       <div class="camera-status" id="scanStatus" aria-live="polite">Pidiendo permiso de cámara…</div>
     </div>
     <button class="btn btn-block" id="scanCapture" disabled style="margin-top:12px">${icon("camera")} Capturar etiqueta</button>`;
+
+  $$("[data-modo]", $("#scanStage")).forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.modo !== modo) setModoEscaneo(b.dataset.modo);
+  }));
 
   const video = $("#scanVideo");
   try {
@@ -803,18 +848,242 @@ async function iniciarEscaneo() {
     if (state.view !== "escanear") { detenerCamara(); return; }
     video.srcObject = camaraStream;
     await video.play().catch(() => {});
-    setScanStatus("Encuadra el precio y captura - puedes tomar varias seguidas.");
-    $("#scanCapture").disabled = false;
     mantenerPantalla(true);
-    if (!esNativo()) getOcrWorker().catch(() => {}); // precalienta Tesseract; en nativo lee Vision
+    if (modo === "barrido") {
+      setScanStatus("Buscando etiquetas de precio…");
+      iniciarBarrido();
+    } else {
+      setScanStatus("Encuadra el precio y captura - puedes tomar varias seguidas.");
+      $("#scanCapture").disabled = false;
+      if (!esNativo()) getOcrWorker().catch(() => {}); // precalienta Tesseract; en nativo lee Vision
+    }
   } catch (err) {
     detenerCamara();
     renderProblemaCamara(PROBLEMAS_CAMARA[err.name] ? err.name : "generico");
     return;
   }
 
-  $("#scanCapture").addEventListener("click", () => capturarEtiqueta());
-  $("#autoChip").addEventListener("click", () => setAuto(!scanSession.auto));
+  $("#scanCapture")?.addEventListener("click", () => capturarEtiqueta());
+  $("#autoChip")?.addEventListener("click", () => setAuto(!scanSession.auto));
+  $("#barridoPausa")?.addEventListener("click", () => setBarridoPausa(!barrido.pausado));
+  $("#scanOverlay")?.addEventListener("pointerdown", tocarOverlay);
+}
+
+// ------------------------------ Barrido en vivo ------------------------------
+
+function iniciarBarrido() {
+  barrido.seguimiento.reiniciar();
+  barrido.pausado = false;
+  barrido.lentos = 0;
+  barrido.fallos = 0;
+  barrido.cajas = [];
+  programarBarrido(250);
+}
+
+function programarBarrido(ms = 60) {
+  clearTimeout(barrido.timer);
+  if (modoEscaneo() !== "barrido" || state.view !== "escanear") return;
+  barrido.timer = setTimeout(cicloBarrido, ms);
+}
+
+/** Fotograma completo (sin recorte) reducido a `anchoMax` para el barrido. */
+function capturarFrameCompleto(anchoMax = 1024) {
+  const video = $("#scanVideo");
+  if (!video || !video.videoWidth) return null;
+  const escala = Math.min(1, anchoMax / video.videoWidth);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(video.videoWidth * escala);
+  canvas.height = Math.round(video.videoHeight * escala);
+  canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+async function cicloBarrido() {
+  if (state.view !== "escanear" || !camaraStream || modoEscaneo() !== "barrido") return;
+  if (barrido.pausado || barrido.ocupado) { programarBarrido(150); return; }
+  barrido.ocupado = true;
+  try {
+    const frame = capturarFrameCompleto(1024);
+    if (!frame) return;
+    const t0 = performance.now();
+    const r = await leerEtiquetaNativa(frame, { rapido: true, nivelRapido: barrido.nivelRapido, ladoMax: 1024 });
+    const duracion = performance.now() - t0;
+    if (!r) return;
+    // Si Vision tarda en este iPhone, baja al nivel rápido (precios grandes se leen igual).
+    if (duracion > 1200 && !barrido.nivelRapido && ++barrido.lentos >= 2) barrido.nivelRapido = true;
+
+    const regiones = agruparEtiquetas(r.lineas || [], r.palabras || []);
+    const { visibles, nuevasConfirmadas } = barrido.seguimiento.actualizar(regiones, Date.now());
+    barrido.frame = { w: frame.width, h: frame.height, canvas: frame };
+    dibujarOverlay(visibles);
+    nuevasConfirmadas.forEach((p) => incorporarPista(p, frame));
+    if (!nuevasConfirmadas.length && !barrido.statusTimer) setScanStatus(resumenBarrido(visibles));
+    barrido.fallos = 0;
+  } catch (e) {
+    if (++barrido.fallos >= 3) {
+      setScanStatus("El barrido falló en este dispositivo. Cambia a Captura.");
+      barrido.ocupado = false;
+      return;
+    }
+  } finally {
+    barrido.ocupado = false;
+  }
+  programarBarrido(60);
+}
+
+function resumenBarrido(visibles) {
+  const n = scanSession.capturas.length;
+  const ver = veredictoEscaner();
+  if (ver) return `${n} etiquetas · conviene ${ver.mejor.etiqueta} (${fmt(ver.mejor.normalizado)} ${ver.mejor.baseLabel})`;
+  if (n === 1) return "1 etiqueta · sigue hasta la siguiente para comparar";
+  if (n > 1) return `${n} etiquetas · falta el gramaje de alguna: tócala para completarlo`;
+  return visibles.length ? "Etiqueta a la vista… mantén un instante" : "Buscando etiquetas de precio…";
+}
+
+function setBarridoPausa(on) {
+  barrido.pausado = on;
+  const chip = $("#barridoPausa");
+  if (chip) {
+    chip.textContent = on ? "Seguir" : "Pausa";
+    chip.setAttribute("aria-pressed", String(on));
+    chip.classList.toggle("on", on);
+  }
+  setScanStatus(on ? "En pausa: toca una etiqueta para revisarla o agregarla." : resumenBarrido(barrido.seguimiento.pistas));
+  if (!on) programarBarrido(0);
+}
+
+function capturaDePista(p) {
+  return scanSession.capturas.find((c) => c.firma === p.firma) || null;
+}
+
+/** Recorte de la etiqueta en el fotograma, con un poco de aire, para la miniatura. */
+function recortarRegion(frame, bbox) {
+  const pad = Math.max(8, (bbox.y1 - bbox.y0) * 0.25);
+  const x0 = Math.max(0, bbox.x0 - pad), y0 = Math.max(0, bbox.y0 - pad);
+  const x1 = Math.min(frame.width, bbox.x1 + pad), y1 = Math.min(frame.height, bbox.y1 + pad);
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(x1 - x0));
+  c.height = Math.max(1, Math.round(y1 - y0));
+  c.getContext("2d").drawImage(frame, x0, y0, c.width, c.height, 0, 0, c.width, c.height);
+  return c;
+}
+
+function incorporarPista(p, frame) {
+  if (capturaDePista(p)) return;
+  const cap = agregarCaptura(p.datos, recortarRegion(frame, p.bbox));
+  cap.firma = p.firma;
+  cap.texto = p.texto;
+  cap.fuente = "vision";
+  haptico("toque");
+  avisoBarrido(`Agregada: ${fmt(cap.precio)}${cap.contenido ? ` · ${cap.contenido} ${cap.unidad}` : " · sin gramaje: tócala para completarlo"}`);
+  refinarConIA(cap);
+}
+
+/** Mensaje breve en el estado; luego vuelve al resumen del barrido. */
+function avisoBarrido(msg) {
+  setScanStatus(msg);
+  clearTimeout(barrido.statusTimer);
+  barrido.statusTimer = setTimeout(() => {
+    barrido.statusTimer = null;
+    if (modoEscaneo() === "barrido" && !barrido.pausado) setScanStatus(resumenBarrido(barrido.seguimiento.pistas));
+  }, 1800);
+}
+
+/**
+ * Apple Intelligence relee el texto de la etiqueta confirmada (una vez por
+ * etiqueta, no por fotograma) y mejora nombre, gramaje y pack. No toca lo
+ * que la persona ya corrigió a mano ni cambia el precio leído.
+ */
+async function refinarConIA(cap) {
+  const caps = await capacidades();
+  if (!caps.appleIntelligence || !cap.texto) return;
+  const ia = await interpretarEtiqueta(cap.texto);
+  if (!ia || cap.editada || !scanSession.capturas.includes(cap)) return;
+  if (ia.nombre) cap.nombre = ia.nombre;
+  if (ia.contenido && ia.unidad && (!cap.contenido || ia.confianza === "alta")) { cap.contenido = ia.contenido; cap.unidad = ia.unidad; }
+  if (ia.unidades > 1 && (cap.unidades || 1) === 1) cap.unidades = ia.unidades;
+  cap.fuente = "apple";
+  renderScanTray();
+  if (modoEscaneo() === "barrido" && !barrido.statusTimer) setScanStatus(resumenBarrido(barrido.seguimiento.pistas));
+}
+
+function tocarOverlay(e) {
+  const canvas = e.currentTarget;
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const hit = barrido.cajas.find((c) => x >= c.x && x <= c.x + c.w && y >= c.y - 30 && y <= c.y + c.h);
+  if (!hit) return;
+  const pista = barrido.seguimiento.pistas.find((p) => p.id === hit.id);
+  if (!pista) return;
+  const cap = capturaDePista(pista);
+  if (cap) { openCapturaSheet(cap); return; }
+  const confirmada = barrido.seguimiento.confirmar(pista.id);
+  if (confirmada && barrido.frame) incorporarPista(confirmada, barrido.frame.canvas);
+}
+
+function dibujarOverlay(visibles) {
+  const canvas = $("#scanOverlay"), video = $("#scanVideo");
+  if (!canvas || !video?.videoWidth || !barrido.frame) return;
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) {
+    canvas.width = Math.round(cw * dpr);
+    canvas.height = Math.round(ch * dpr);
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+  const mejorFirma = veredictoEscaner()?.mejor.cap.firma;
+  barrido.cajas = [];
+
+  for (const p of visibles) {
+    const b = mapearCaja(p.bbox, barrido.frame, { w: video.videoWidth, h: video.videoHeight }, { w: cw, h: ch });
+    const pad = 6;
+    const x = b.x0 - pad, y = b.y0 - pad, w = b.x1 - b.x0 + pad * 2, h = b.y1 - b.y0 + pad * 2;
+    const cap = capturaDePista(p);
+    const d = cap || p.datos;
+    const esMejor = Boolean(cap) && cap.firma === mejorFirma;
+    const color = esMejor ? "#34c759" : cap ? "#ffffff" : "rgba(255,255,255,.6)";
+
+    ctx.lineWidth = esMejor ? 3 : 2;
+    ctx.strokeStyle = color;
+    ctx.setLineDash(cap ? [] : [6, 5]);
+    trazarRedondo(ctx, x, y, w, h, 10);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const norm = normalizadoDe(d);
+    const medida = d.unidad === "unidad" ? "u" : `100 ${d.unidad}`;
+    const texto = norm ? `${fmt(norm)} / ${medida}` : `${fmt(d.precio)} · ¿gramaje?`;
+    const chip = esMejor ? `★ Mejor · ${texto}` : cap?.fuente === "apple" ? `✦ ${texto}` : texto;
+    dibujarChip(ctx, x, y, w, chip, esMejor ? "#34c759" : cap ? "#c41e1e" : "rgba(0,0,0,.55)", cw);
+    barrido.cajas.push({ id: p.id, x, y, w, h });
+  }
+}
+
+function trazarRedondo(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function dibujarChip(ctx, x, y, w, texto, fondo, cw) {
+  ctx.font = "650 13px -apple-system, system-ui, sans-serif";
+  const ancho = Math.ceil(ctx.measureText(texto).width) + 18;
+  const alto = 24;
+  let cx = Math.min(Math.max(4, x), cw - ancho - 4);
+  let cy = y - alto - 6;
+  if (cy < 4) cy = y + 6; // sin sitio arriba: dentro de la caja
+  ctx.fillStyle = fondo;
+  trazarRedondo(ctx, cx, cy, ancho, alto, 12);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.textBaseline = "middle";
+  ctx.fillText(texto, cx + 9, cy + alto / 2 + 0.5);
 }
 
 function refrescarBotonLectorIA() {
@@ -1055,7 +1324,7 @@ function renderScanTray() {
         <img src="${c.thumb}" alt="">
         <div class="sc-precio tabular">${fmt(c.precio)}</div>
         <div class="sc-meta tabular">${total ? `${total} ${unidadCorta}${norm ? ` · ${fmt(norm)}/${c.unidad === "unidad" ? "unid." : `100 ${c.unidad}`}` : ""}` : "Sin gramaje - toca para completar"}</div>
-        ${c.nombre ? `<div class="sc-meta" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${esc(c.nombre)}</div>` : ""}
+        ${c.nombre ? `<div class="sc-meta" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${c.fuente === "apple" ? "✦ " : ""}${esc(c.nombre)}</div>` : ""}
         ${c.agregadaComo
           ? `<span class="chip chip-menos" style="margin-top:6px">✓ En tu carrito</span>`
           : enLista
@@ -1193,6 +1462,7 @@ function openCapturaSheet(cap) {
       <button class="btn btn-quiet" id="ecCancelar">Cancelar</button>
     </div>`);
   const leerCampos = () => {
+    cap.editada = true;
     cap.nombre = $("#ecNombre", sheetContent).value.trim();
     cap.precio = Number($("#ecPrecio", sheetContent).value || 0) || null;
     cap.contenido = Number($("#ecContenido", sheetContent).value || 0) || null;
@@ -1391,6 +1661,9 @@ function openOpcionesListaSheet(lista) {
     <div class="field"><label for="olNombre">Renombrar</label><input class="input" id="olNombre" value="${esc(lista.nombre)}"></div>
     <div class="button-col">
       <button class="btn btn-block" id="olGuardar">Guardar nombre</button>
+      ${esNativo() ? `<button class="btn btn-tonal btn-block" id="olRecordatorios">${icon("check")} Enviar a Recordatorios</button>
+      <button class="btn btn-ghost btn-block" id="olImportar">Traer pendientes de Recordatorios</button>` : ""}
+      <button class="btn btn-ghost btn-block" id="olCompartir">Compartir lista${esNativo() ? " (Notas, WhatsApp…)" : ""}</button>
       <button class="btn btn-ghost btn-block" id="olDuplicar">Duplicar lista</button>
       <button class="btn btn-quiet" id="olCancelar">Cancelar</button>
     </div>`);
@@ -1403,7 +1676,88 @@ function openOpcionesListaSheet(lista) {
     duplicarLista(lista.id);
     closeSheet(); toast("Lista duplicada y activada"); renderListas();
   });
+  $("#olRecordatorios", sheetContent)?.addEventListener("click", () => { closeSheet(); enviarARecordatorios(lista); });
+  $("#olImportar", sheetContent)?.addEventListener("click", () => { closeSheet(); traerDeRecordatorios(lista); });
+  $("#olCompartir", sheetContent).addEventListener("click", () => { closeSheet(); compartirLista(lista); });
   $("#olCancelar", sheetContent).addEventListener("click", closeSheet);
+}
+
+// ------------------ Lista <-> Recordatorios / Notas / compartir --------------
+
+function itemsExportables(lista) {
+  return getLista(lista.id).filter((i) => i.estado_compra !== "aplazado");
+}
+
+function notaDeItem(i) {
+  const precio = i.precio_verificado ?? i.precio_estimado;
+  return [
+    i.cantidad > 1 ? `×${i.cantidad}` : null,
+    i.contenido ? `${i.contenido} ${i.unidad_medida}` : null,
+    precio > 0 ? `~${fmt(precio)}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+function textoLista(lista) {
+  const items = itemsExportables(lista);
+  const t = calcularTotales(lista.id);
+  const lineas = items.map((i) => `• ${i.nombre}${notaDeItem(i) ? ` (${notaDeItem(i)})` : ""}`);
+  return `${lista.nombre}\n${lineas.join("\n")}\n\nEstimado: ${fmt(t.totalEstimado)}\nHecho con Quanto`;
+}
+
+async function enviarARecordatorios(lista) {
+  const items = itemsExportables(lista);
+  if (!items.length) { toast("La lista está vacía."); return; }
+  try {
+    const r = await exportarRecordatorios(lista.nombre, items.map((i) => ({ nombre: i.nombre, nota: notaDeItem(i) || null })));
+    if (!r) { toast("Recordatorios solo está disponible en la app de iPhone."); return; }
+    haptico("exito");
+    toast(r.creados ? `${r.creados} ${r.creados === 1 ? "item enviado" : "items enviados"} a Recordatorios · "${lista.nombre}"${r.omitidos ? ` (${r.omitidos} ya estaban)` : ""}` : "Todo ya estaba en Recordatorios.");
+  } catch (e) {
+    toast(e?.codigo === "sin_permiso" ? "Permite el acceso a Recordatorios en Ajustes > Quanto." : "No se pudo hablar con Recordatorios.");
+  }
+}
+
+async function traerDeRecordatorios(lista) {
+  let pendientes;
+  try {
+    pendientes = await importarRecordatorios(lista.nombre);
+    if (pendientes && !pendientes.length) pendientes = await importarRecordatorios(null);
+  } catch (e) {
+    toast(e?.codigo === "sin_permiso" ? "Permite el acceso a Recordatorios en Ajustes > Quanto." : "No se pudo leer Recordatorios.");
+    return;
+  }
+  if (!pendientes) { toast("Recordatorios solo está disponible en la app de iPhone."); return; }
+  if (!pendientes.length) { toast("No hay pendientes en Recordatorios."); return; }
+  const candidatos = pendientes.slice(0, 60).map((p, i) => ({ ...p, i, yaEsta: Boolean(buscarItemSimilar(p.nombre)) }));
+  openSheet(`
+    <h2 class="sheet-title">Traer de Recordatorios</h2>
+    <p class="sheet-sub">Pendientes encontrados. Los que ya están en "${esc(lista.nombre)}" vienen desmarcados.</p>
+    <div class="import-list">
+      ${candidatos.map((c) => `
+        <label class="import-row">
+          <input type="checkbox" data-imp="${c.i}" ${c.yaEsta ? "" : "checked"}>
+          <span class="row-main"><span class="row-title">${esc(c.nombre)}</span><span class="row-meta">${esc([c.lista, c.nota].filter(Boolean).join(" · "))}${c.yaEsta ? " · ya en tu lista" : ""}</span></span>
+        </label>`).join("")}
+    </div>
+    <div class="button-col" style="margin-top:12px">
+      <button class="btn btn-block" id="impAgregar">Agregar seleccionados</button>
+      <button class="btn btn-quiet" id="impCancelar">Cancelar</button>
+    </div>`);
+  $("#impAgregar", sheetContent).addEventListener("click", () => {
+    const marcados = $$("[data-imp]:checked", sheetContent).map((el) => candidatos[Number(el.dataset.imp)]);
+    marcados.forEach((c) => guardarProducto({ nombre: c.nombre, cantidad: 1, precio_estimado: 0, estado_precio: "estimado", fuente: "recordatorios", lista_id: lista.id }));
+    closeSheet();
+    toast(marcados.length ? `${marcados.length} ${marcados.length === 1 ? "item traído" : "items traídos"} de Recordatorios` : "Nada seleccionado");
+    renderListas();
+  });
+  $("#impCancelar", sheetContent).addEventListener("click", closeSheet);
+}
+
+async function compartirLista(lista) {
+  if (!itemsExportables(lista).length) { toast("La lista está vacía."); return; }
+  const r = await compartir(textoLista(lista), lista.nombre);
+  if (r === "copiado") toast("Lista copiada: pégala en Notas o donde quieras.");
+  else if (r === null) toast("No se pudo compartir en este navegador.");
 }
 
 // --------------------------- Item: agregar / editar -------------------------

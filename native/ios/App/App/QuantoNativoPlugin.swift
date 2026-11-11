@@ -8,11 +8,15 @@ import UIKit
 ///
 /// Métodos:
 ///   capacidades()                       -> { vision, codigoBarras, appleIntelligence, plataforma }
-///   leerEtiqueta({ imagen, ia })        -> { texto, palabras, codigo, ia, iaEstado }
+///   leerEtiqueta({ imagen, ia, rapido }) -> { texto, lineas, palabras, codigo, ia, iaEstado }
+///   interpretarEtiqueta({ texto })      -> datos de la etiqueta | { ia: null }
 ///   interpretarProducto({ frase })      -> { nombre, cantidad, precio, contenido, unidad } | { ia: null }
 ///   explicarComparacion({ resumen })    -> { titulo, explicacion } | { ia: null }
 ///   haptico({ tipo })                   -> tipo: "exito" | "aviso" | "toque"
 ///   mantenerPantalla({ activo })
+///   exportarRecordatorios({ lista, items: [{ nombre, nota }] }) -> { creados, omitidos }
+///   importarRecordatorios({ lista? })   -> { items: [{ nombre, nota, lista }] }
+///   compartir({ texto, titulo })        -> { completado, actividad }
 @objc(QuantoNativoPlugin)
 public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "QuantoNativoPlugin"
@@ -20,10 +24,14 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "capacidades", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "leerEtiqueta", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "interpretarEtiqueta", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "interpretarProducto", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "explicarComparacion", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "haptico", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "mantenerPantalla", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "exportarRecordatorios", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "importarRecordatorios", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "compartir", returnType: CAPPluginReturnPromise),
     ]
 
     public override func load() {
@@ -34,6 +42,9 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve([
             "vision": true,
             "codigoBarras": true,
+            "barrido": true,
+            "recordatorios": true,
+            "compartir": true,
             "appleIntelligence": AppleIA.disponible(),
             "plataforma": "ios",
         ])
@@ -47,11 +58,12 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         let usarIA = call.getBool("ia") ?? true
+        let rapido = call.getBool("rapido") ?? false
 
         DispatchQueue.global(qos: .userInitiated).async {
             let lectura: LectorEtiqueta.Lectura
             do {
-                lectura = try LectorEtiqueta.leer(cg)
+                lectura = try LectorEtiqueta.leer(cg, rapido: rapido)
             } catch {
                 call.reject("vision: \(error.localizedDescription)")
                 return
@@ -59,6 +71,7 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
 
             var resultado: [String: Any] = [
                 "texto": lectura.texto,
+                "lineas": lectura.lineas,
                 "palabras": lectura.palabras,
                 "codigo": lectura.codigo ?? NSNull(),
                 "motor": "vision",
@@ -80,6 +93,22 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
                     resultado["iaEstado"] = "error: \(error.localizedDescription)"
                 }
                 call.resolve(resultado)
+            }
+        }
+    }
+
+    @objc func interpretarEtiqueta(_ call: CAPPluginCall) {
+        let texto = (call.getString("texto") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !texto.isEmpty else { call.reject("texto_vacio"); return }
+        Task {
+            do {
+                if let e = try await AppleIA.etiqueta(texto: texto) {
+                    call.resolve(e)
+                } else {
+                    call.resolve(["ia": NSNull()])
+                }
+            } catch {
+                call.reject("ia: \(error.localizedDescription)")
             }
         }
     }
@@ -136,6 +165,60 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             UIApplication.shared.isIdleTimerDisabled = activo
             call.resolve()
+        }
+    }
+
+    // MARK: - Recordatorios (la lista de compras de Apple)
+
+    @objc func exportarRecordatorios(_ call: CAPPluginCall) {
+        let lista = (call.getString("lista") ?? "Quanto").trimmingCharacters(in: .whitespacesAndNewlines)
+        let items = (call.getArray("items") as? [[String: Any]] ?? []).compactMap { d -> Recordatorios.Item? in
+            guard let nombre = d["nombre"] as? String, !nombre.isEmpty else { return nil }
+            return Recordatorios.Item(nombre: nombre, nota: d["nota"] as? String)
+        }
+        guard !items.isEmpty else { call.reject("sin_items"); return }
+        Task {
+            do {
+                let r = try await Recordatorios.exportar(lista: lista.isEmpty ? "Quanto" : lista, items: items)
+                call.resolve(["creados": r.creados, "omitidos": r.omitidos])
+            } catch Recordatorios.Fallo.sinPermiso {
+                call.reject("sin_permiso")
+            } catch {
+                call.reject("recordatorios: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    @objc func importarRecordatorios(_ call: CAPPluginCall) {
+        let lista = call.getString("lista")
+        Task {
+            do {
+                let items = try await Recordatorios.pendientes(lista: lista)
+                call.resolve(["items": items.map { ["nombre": $0.nombre, "nota": $0.nota ?? NSNull(), "lista": $0.lista ?? NSNull()] }])
+            } catch Recordatorios.Fallo.sinPermiso {
+                call.reject("sin_permiso")
+            } catch {
+                call.reject("recordatorios: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    // MARK: - Compartir (Notas, Mensajes, WhatsApp...)
+
+    @objc func compartir(_ call: CAPPluginCall) {
+        let texto = call.getString("texto") ?? ""
+        guard !texto.isEmpty else { call.reject("sin_texto"); return }
+        DispatchQueue.main.async {
+            guard let vc = self.bridge?.viewController else { call.reject("sin_vista"); return }
+            let hoja = UIActivityViewController(activityItems: [texto], applicationActivities: nil)
+            hoja.completionWithItemsHandler = { actividad, completado, _, _ in
+                call.resolve(["completado": completado, "actividad": actividad?.rawValue ?? NSNull()])
+            }
+            if let pop = hoja.popoverPresentationController {
+                pop.sourceView = vc.view
+                pop.sourceRect = CGRect(x: vc.view.bounds.midX, y: vc.view.bounds.maxY - 80, width: 1, height: 1)
+            }
+            vc.present(hoja, animated: true)
         }
     }
 }

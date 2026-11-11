@@ -5,12 +5,15 @@ La misma web de Quanto empaquetada como app iOS. Lo nativo es un plugin
 
 | Capacidad | Framework | Dónde se usa |
 |---|---|---|
-| OCR de etiquetas con cajas por palabra | Vision | Comparar con cámara |
+| **Barrido en vivo**: detecta todas las etiquetas del encuadre, las sigue y las agrega solas | Vision (OCR por fotograma) + `assets/vivo.js` | Comparar con cámara, modo por defecto |
+| OCR de etiquetas con cajas por palabra y por línea | Vision | Comparar con cámara |
 | Código de barras (EAN/UPC) | Vision | Completa nombre y contenido desde Open Food Facts o el catálogo |
 | Interpretar la etiqueta (precio, contenido, pack, nombre) | Apple Intelligence (Foundation Models, iOS 26+) | Comparar con cámara |
 | Interpretar una frase dictada o escrita ("dos leches Vita de litro a 1.25") | Apple Intelligence | Agregar item a la lista |
 | Explicar el veredicto en lenguaje natural | Apple Intelligence | Comparador manual y cámara |
 | Vibración al capturar, pantalla encendida en la góndola | UIKit | Comparar con cámara |
+| Enviar la lista a Recordatorios y traer pendientes de allí | EventKit | Listas → ⋯ |
+| Compartir la lista a Notas, Mensajes, WhatsApp… | UIActivityViewController | Listas → ⋯ |
 
 Si Apple Intelligence no está disponible, cada función cae a la lógica local
 (parser de `assets/ocr.js`, textos fijos). Nada sale del teléfono y no cuesta
@@ -20,11 +23,43 @@ hace falta permiso de micrófono.
 Orden de lectores en la app (`leerDatosEtiqueta` en `assets/app.js`):
 nativo → lector IA remoto (`worker/`, si está configurado) → Tesseract.
 
+## Barrido en vivo (cómo funciona)
+
+1. Cada ~100 ms la web manda a Vision el fotograma completo reducido a 1024 px
+   (`leerEtiqueta` con `ia: false`). Si Vision tarda más de 1,2 s dos veces,
+   pasa al nivel rápido.
+2. `assets/vivo.js` agrupa las líneas por cercanía en etiquetas, parte los
+   grupos que tienen dos precios separados (etiquetas pegadas en el riel) y
+   parsea cada una con el parser de `assets/ocr.js`.
+3. `Seguimiento` empareja cada etiqueta con la del fotograma anterior (por
+   posición y, si la cámara saltó, por precio + gramaje). A la segunda vista
+   se confirma y entra en la sesión una sola vez.
+4. El overlay dibuja cada etiqueta con su precio por 100 g/ml; el ganador en
+   verde con ★. Tocar una etiqueta la agrega al instante o abre su ficha.
+5. Al confirmarse, Apple Intelligence relee el texto de esa etiqueta
+   (`interpretarEtiqueta`) y mejora nombre, gramaje y pack. Las fichas
+   mejoradas llevan ✦.
+
+Pruebas de la lógica sin dispositivo: `node lab/vivo-test.mjs`.
+
+## Recordatorios y Notas
+
+- **Recordatorios** tiene API pública (EventKit): "Enviar a Recordatorios"
+  crea una lista con el nombre de tu lista de Quanto y un recordatorio por
+  item (nota con cantidad, gramaje y precio estimado), sin duplicar los que
+  ya estén pendientes. "Traer pendientes de Recordatorios" lee esa lista o,
+  si está vacía, todas, y te deja elegir cuáles agregar. La primera vez iOS
+  pide permiso.
+- **Notas** no tiene API: "Compartir lista" abre la hoja de compartir de iOS
+  y ahí eliges Notas, Mensajes o WhatsApp. En web usa `navigator.share` o
+  copia al portapapeles.
+
 ## Portar a web y Android
 
 Toda la web habla con el dispositivo a través de `data/nativo.js`, que expone
-`capacidades`, `leerEtiquetaNativa`, `interpretarProducto`,
-`explicarComparacion`, `haptico` y `mantenerPantalla`. En web esas funciones
+`capacidades`, `leerEtiquetaNativa`, `interpretarEtiqueta`,
+`interpretarProducto`, `explicarComparacion`, `haptico`, `mantenerPantalla`,
+`exportarRecordatorios`, `importarRecordatorios` y `compartir`. En web esas funciones
 devuelven `null`/`false` y la app usa sus alternativas. Para Android basta con
 un plugin de Capacitor con el mismo nombre (`QuantoNativo`) y los mismos
 métodos, por ejemplo con ML Kit (texto y códigos de barras) y Gemini Nano o el
@@ -80,7 +115,8 @@ native/
         ├── QuantoNativoPlugin.swift   # métodos expuestos a la web (window.Capacitor.Plugins.QuantoNativo)
         ├── LectorEtiqueta.swift       # Vision: OCR con cajas por palabra + código de barras
         ├── AppleIA.swift              # Foundation Models: etiqueta, producto dictado, veredicto
-        ├── Info.plist                 # NSCameraUsageDescription
+        ├── Recordatorios.swift        # EventKit: exportar e importar la lista de compras
+        ├── Info.plist                 # permisos de cámara y Recordatorios
         └── Base.lproj/Main.storyboard # usa MainViewController
 ```
 
@@ -90,9 +126,14 @@ native/
   donde se generó). Si Xcode marca algo, lo más probable es un detalle de la
   API de Foundation Models en `AppleIA.swift` (`@Generable`, `@Guide`,
   `prewarm()`); Vision y Capacitor son API estable.
-- La web se probó en Chromium simulando el plugin: lectura con código de
-  barras, lectura con Apple Intelligence, explicación del veredicto, asistente
-  con frase interpretada, hápticos y pantalla activa.
+- La web se probó en Chromium simulando el plugin: barrido en vivo (dos
+  etiquetas confirmadas, overlay, toque, pausa, cambio de modo), lectura con
+  código de barras y con Apple Intelligence, explicación del veredicto,
+  asistente con frase interpretada, Recordatorios (enviar y traer), compartir,
+  hápticos y pantalla activa.
+- En el iPhone conviene ajustar dos números según lo que veas en la góndola:
+  `confirmarTras` (vistas para confirmar, 2) y los factores `expH`/`expV` de
+  `agruparEtiquetas` si etiquetas vecinas se juntan o una se parte.
 - El Service Worker se omite dentro de la app: WKWebView no lo soporta en el
   esquema `capacitor://` y no hace falta (la web va dentro del paquete).
 - Para pasar a producción: cambiar icono y splash en `Assets.xcassets`,

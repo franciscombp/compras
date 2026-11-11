@@ -12,7 +12,11 @@
 
 import { canvasABase64 } from "./api.js";
 
-const SIN_CAPACIDADES = { vision: false, codigoBarras: false, appleIntelligence: false, plataforma: "web" };
+const SIN_CAPACIDADES = {
+  vision: false, codigoBarras: false, barrido: false, recordatorios: false,
+  compartir: typeof navigator !== "undefined" && Boolean(navigator.share || navigator.clipboard),
+  appleIntelligence: false, plataforma: "web",
+};
 
 function plugin() {
   const C = window.Capacitor;
@@ -42,10 +46,34 @@ export function capacidades() {
  * { texto, palabras:[{text,bbox}], codigo, ia, iaEstado } o null si no hay
  * plugin. `rapido` evita la interpretación con Apple Intelligence.
  */
-export async function leerEtiquetaNativa(canvas, { rapido = false } = {}) {
+export async function leerEtiquetaNativa(canvas, { rapido = false, nivelRapido = false, ladoMax = 1280 } = {}) {
   const p = plugin();
   if (!p) return null;
-  return p.leerEtiqueta({ imagen: canvasABase64(canvas), ia: !rapido });
+  return p.leerEtiqueta({ imagen: canvasABase64(canvas, ladoMax), ia: !rapido, rapido: nivelRapido });
+}
+
+/**
+ * Interpreta con Apple Intelligence el texto de una etiqueta ya leída
+ * (barrido en vivo: el OCR corre en cada fotograma, la IA solo al confirmar).
+ * Devuelve { precio, contenido, unidad, unidades, nombre, confianza } o null.
+ */
+export async function interpretarEtiqueta(texto) {
+  const p = plugin();
+  if (!p || !String(texto || "").trim()) return null;
+  try {
+    const r = await p.interpretarEtiqueta({ texto });
+    if (!r || r.ia === null) return null;
+    return {
+      precio: Number.isFinite(r.precio) && r.precio > 0 ? r.precio : null,
+      contenido: Number.isFinite(r.contenido) && r.contenido > 0 ? r.contenido : null,
+      unidad: ["g", "ml", "unidad"].includes(r.unidad) ? r.unidad : null,
+      unidades: Math.min(48, Math.max(1, Number(r.unidades) || 1)),
+      nombre: String(r.nombre || "").trim(),
+      confianza: r.confianza || "media",
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -101,4 +129,58 @@ export function haptico(tipo = "toque") {
 /** Evita que el teléfono se apague mientras se escanea en la góndola. */
 export function mantenerPantalla(activo) {
   plugin()?.mantenerPantalla({ activo: Boolean(activo) }).catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// Recordatorios (lista de compras de Apple) y compartir (Notas, WhatsApp...)
+// ---------------------------------------------------------------------------
+
+/**
+ * Crea en Recordatorios una lista con ese nombre (o la reutiliza) y añade un
+ * recordatorio por item. Devuelve { creados, omitidos } o null si no hay
+ * plugin. Lanza Error con .codigo "sin_permiso" si la persona lo negó.
+ */
+export async function exportarRecordatorios(lista, items) {
+  const p = plugin();
+  if (!p) return null;
+  try {
+    return await p.exportarRecordatorios({ lista, items });
+  } catch (e) {
+    throw Object.assign(new Error(String(e?.message || e)), { codigo: /sin_permiso/.test(String(e?.message || e)) ? "sin_permiso" : "recordatorios" });
+  }
+}
+
+/** Recordatorios pendientes de una lista (o de todas). [{ nombre, nota, lista }] o null. */
+export async function importarRecordatorios(lista = null) {
+  const p = plugin();
+  if (!p) return null;
+  try {
+    const r = await p.importarRecordatorios(lista ? { lista } : {});
+    return Array.isArray(r?.items) ? r.items : [];
+  } catch (e) {
+    throw Object.assign(new Error(String(e?.message || e)), { codigo: /sin_permiso/.test(String(e?.message || e)) ? "sin_permiso" : "recordatorios" });
+  }
+}
+
+/**
+ * Comparte texto: hoja nativa en iOS (Notas, Mensajes, WhatsApp...),
+ * navigator.share en web móvil, portapapeles en escritorio.
+ * Devuelve "compartido" | "copiado" | "cancelado" | null.
+ */
+export async function compartir(texto, titulo = "Lista de compras") {
+  const p = plugin();
+  if (p) {
+    try {
+      const r = await p.compartir({ texto, titulo });
+      return r?.completado ? "compartido" : "cancelado";
+    } catch { return null; }
+  }
+  if (navigator.share) {
+    try { await navigator.share({ title: titulo, text: texto }); return "compartido"; }
+    catch (e) { if (e?.name === "AbortError") return "cancelado"; }
+  }
+  if (navigator.clipboard?.writeText) {
+    try { await navigator.clipboard.writeText(texto); return "copiado"; } catch { /* sin permiso */ }
+  }
+  return null;
 }

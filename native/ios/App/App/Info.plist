@@ -26,6 +26,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Quanto usa la cámara para leer las etiquetas de precio y comparar productos.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Quanto puede enviar tu lista de compras a Recordatorios y traer los pendientes de allí.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Quanto puede enviar tu lista de compras a Recordatorios y traer los pendientes de allí.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

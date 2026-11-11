@@ -881,8 +881,12 @@ button { font: inherit; color: inherit; }
 
 /* ================== Escáner: sesión multi-captura ======================= */
 
+.stage-top {
+  position: absolute; top: 10px; left: 10px; right: 10px; z-index: 2;
+  display: flex; justify-content: flex-end; align-items: center; gap: 8px;
+}
+.stage-top .modo-switch { margin-right: auto; }
 .auto-chip {
-  position: absolute; top: 10px; right: 10px; z-index: 2;
   display: inline-flex; align-items: center; gap: 6px;
   min-height: 34px; padding: 6px 14px;
   border: 1px solid rgba(255, 255, 255, .5); border-radius: var(--radius-full);
@@ -932,3 +936,26 @@ html.nativo button, html.nativo .nav-item, html.nativo .scan-card, html.nativo .
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 html.nativo #lectorConfig { pointer-events: none; color: var(--ink-3); }
+
+/* ---- Barrido en vivo ---- */
+.camera-stage.barrido { aspect-ratio: 3 / 4; max-height: min(62vh, 560px); }
+.scan-overlay { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: pointer; }
+.modo-switch {
+  display: inline-flex; padding: 3px; gap: 2px;
+  border-radius: var(--radius-full); background: rgba(0, 0, 0, .38);
+  border: 1px solid rgba(255, 255, 255, .35);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.stage-chip {
+  border: none; background: transparent; color: rgba(255, 255, 255, .85);
+  min-height: 28px; padding: 4px 12px; border-radius: var(--radius-full);
+  font-size: 12.5px; font-weight: 650; cursor: pointer;
+}
+.stage-chip.on { background: #fff; color: var(--brand-deep); }
+.barrido-hint { margin: 10px 2px 0; }
+
+/* ---- Traer de Recordatorios ---- */
+.import-list { max-height: 46vh; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-m); }
+.import-row { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.import-row:last-child { border-bottom: none; }
+.import-row input { width: 20px; height: 20px; accent-color: var(--brand); flex: none; }
