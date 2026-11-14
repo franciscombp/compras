@@ -13,14 +13,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development
 
+All commands run from the repository root. The root `package.json` only holds shortcuts; it has no dependencies.
+
 ### Run locally (web)
 
 ```bash
-# Python
-python3 -m http.server 8000
-
-# Or Node.js
-npx http-server
+npm run serve          # = python3 -m http.server 8000 --directory web
+npm run serve:https    # https://localhost:4443 for camera/dictation from a phone (needs mkcert certs, see docs/desarrollo.md)
 ```
 
 Then open `http://localhost:8000/`
@@ -28,16 +27,16 @@ Then open `http://localhost:8000/`
 ### Build the iOS app (Mac only)
 
 ```bash
-cd native && npm install && npm run ios   # copies the web, syncs Capacitor, opens Xcode
+npm run ios   # copies web/ into native/dist, syncs Capacitor, opens Xcode
 ```
 
 ### Key development workflows
 
-- **Clear Service Worker cache**: Change `CACHE_VERSION` in `assets/sw.js` to force a fresh cache
-- **Validate JavaScript syntax**: `node -c assets/app.js`
-- **Run the logic tests**: `node lab/parser-test.mjs && node lab/vivo-test.mjs && node lab/ahorro-test.mjs`
-- **Check for smart quotes**: `grep -P '[""''«»‹›„‚]' assets/app.js` (causes syntax errors)
-- **Commit and deploy**: `git push origin main` → GitHub Pages updates automatically
+- **Clear Service Worker cache**: Change `CACHE_VERSION` in `web/assets/sw.js` to force a fresh cache
+- **Validate JavaScript syntax**: `node -c web/assets/app.js`
+- **Run the logic tests**: `npm test` (parser, live sweep, savings engine in `tests/`)
+- **Check for smart quotes**: `grep -P '[""''«»‹›„‚]' web/assets/app.js` (causes syntax errors)
+- **Commit and deploy**: merge to `main` → `.github/workflows/static.yml` publishes only `web/` to GitHub Pages (Pages source must be "GitHub Actions"). See `docs/despliegue.md`
 
 ### Disabling browser autocomplete
 
@@ -52,37 +51,45 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 
 ```
 /
-├── index.html              # App shell (5 screens, modals, navbar)
-├── manifest.json           # PWA metadata
-├── assets/
-│   ├── app.js             # UI logic, event delegation, render functions (1800+ lines)
-│   ├── ocr.js             # Shared OCR module: image preprocessing + label parser
-│   ├── vivo.js            # Live sweep logic: cluster OCR lines into price tags, track them across frames (pure, tested)
-│   ├── utils.js           # Shared utilities (DOM, format, UI helpers)
-│   ├── tokens.css         # Design system (colors, typography, layout)
-│   └── sw.js              # Service Worker (network-first caching)
-├── data/
-│   ├── store.js           # Data layer: localStorage + sync queue + price memory, budgets, settings, backup
-│   ├── ahorro.js          # Savings engine: product stats, price traffic light, summary, frequents, store comparison, tips (pure, tested)
-│   ├── api.js             # searchProduct (local catalog) + searchByBarcode (Open Food Facts) + leerEtiqueta (Worker)
-│   ├── nativo.js          # Bridge to the native plugin (QuantoNativo); returns null/false on the web
-│   └── catalogo.json      # Product catalog: seed + weekly GitHub Action updates
-├── lab/                   # Internal tools (NOT linked from the app)
-│   ├── etiquetas.html     # Label-testing page: upload photos, see OCR + parse results
-│   ├── parser-test.mjs    # Parser unit tests: node lab/parser-test.mjs
-│   ├── vivo-test.mjs      # Live sweep tests: node lab/vivo-test.mjs
-│   ├── ahorro-test.mjs    # Savings engine tests: node lab/ahorro-test.mjs [seed.json]  (seed = localStorage dump for browser tests)
-│   └── fetch-catalogo.mjs # Catalog fetcher (runs in weekly GitHub Action)
-├── worker/                # Optional Cloudflare Worker: label reader with Claude (see worker/README.md)
-│   ├── src/index.js       # POST {imagen, tipo} -> {precio, contenido, unidad, unidades, nombre, confianza}
-│   └── wrangler.toml      # ORIGENES_PERMITIDOS, MODELO; secrets: ANTHROPIC_API_KEY, LECTOR_TOKEN
-├── native/                # Optional iOS wrapper: Capacitor + Vision + Apple Intelligence (see native/README.md)
-│   ├── scripts/build-web.mjs       # copies the PWA to native/dist (no Service Worker)
+├── package.json            # Shortcuts only (serve, test, catalogo, ios, worker:dev); no dependencies
+├── web/                    # The PWA. Only this folder is published to GitHub Pages
+│   ├── index.html          # App shell (5 screens, modals, navbar)
+│   ├── manifest.json       # PWA metadata (start_url/scope /compras/)
+│   ├── assets/
+│   │   ├── app.js          # UI logic, event delegation, render functions; also holds the small helpers ($, $$, fmt, esc, toast, icon)
+│   │   ├── ocr.js          # Shared OCR module: image preprocessing + label parser
+│   │   ├── vivo.js         # Live sweep logic: cluster OCR lines into price tags, track them across frames (pure, tested)
+│   │   ├── tokens.css      # Design system (colors, typography, layout)
+│   │   └── sw.js           # Service Worker (network-first caching)
+│   ├── data/
+│   │   ├── store.js        # Data layer: localStorage + sync queue + price memory, budgets, settings, backup
+│   │   ├── ahorro.js       # Savings engine: product stats, price traffic light, summary, frequents, store comparison, tips (pure, tested)
+│   │   ├── api.js          # searchProduct (local catalog) + searchByBarcode (Open Food Facts) + leerEtiqueta (Worker)
+│   │   ├── nativo.js       # Bridge to the native plugin (QuantoNativo); returns null/false on the web
+│   │   └── catalogo.json   # Product catalog: seed + weekly GitHub Action updates
+│   └── lab/etiquetas.html  # Internal label-testing page (not linked from the app): upload photos, see OCR + parse results
+├── tests/                  # Node tests of the pure logic, run with `npm test`
+│   ├── parser-test.mjs     # Label parser
+│   ├── vivo-test.mjs       # Live sweep clustering + tracking
+│   └── ahorro-test.mjs     # Savings engine; `node tests/ahorro-test.mjs seed.json` dumps localStorage as a seed for browser tests
+├── scripts/
+│   ├── fetch-catalogo.mjs  # Catalog fetcher (weekly GitHub Action, or `npm run catalogo`) -> web/data/catalogo.json
+│   ├── catalogo-report.json# Per-source report written by the fetcher
+│   └── servidor-https.py   # HTTPS dev server for web/ (mkcert certs in repo root, gitignored)
+├── worker/                 # Optional Cloudflare Worker: label reader with Claude (see worker/README.md)
+│   ├── src/index.js        # POST {imagen, tipo} -> {precio, contenido, unidad, unidades, nombre, confianza}
+│   └── wrangler.toml       # ORIGENES_PERMITIDOS, MODELO; secrets: ANTHROPIC_API_KEY, LECTOR_TOKEN
+├── native/                 # iOS app: Capacitor + Vision + Apple Intelligence (see native/README.md)
+│   ├── scripts/build-web.mjs       # copies web/ to native/dist (no Service Worker)
 │   └── ios/App/App/*.swift         # QuantoNativoPlugin (bridge), LectorEtiqueta (Vision OCR + barcode), AppleIA (Foundation Models), Recordatorios (EventKit), BarridoView/BarridoModelo/EtiquetasVivo (SwiftUI camera sweep)
-├── .github/workflows/
-│   └── actualizar-catalogo.yml  # Weekly cron (Mon 09:00 UTC) + manual dispatch
-└── docs/                  # Documentation
+├── docs/                   # Spanish docs: arquitectura, desarrollo, despliegue, api-contract
+└── .github/
+    ├── workflows/static.yml              # Publishes web/ to Pages on push to main, manual, and after the catalog bot
+    ├── workflows/actualizar-catalogo.yml # Weekly cron (Mon 09:00 UTC) + manual dispatch
+    └── pull_request_template.md
 ```
+
+All paths below in this file are relative to `web/` unless they start with another top-level folder.
 
 ### Layers
 
@@ -100,10 +107,10 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 - OCR parsing with Tesseract.js (loaded from CDN on demand)
 - State management via `state` object (not persisted; render functions fetch from store)
 
-**3. Utilities** (`assets/utils.js`)
+**3. Helpers** (top of `assets/app.js`)
 - DOM: `$()`, `$$()`
-- Format: `fmt()` (price), `esc()` (HTML escape), `parseNumero()`
-- UI: `toast()`, `icon()`, `debounce()`, `throttle()`
+- Format: `fmt()` (price), `fmtNorm()` (price per 100, 3 decimals under $1), `esc()` (HTML escape); `parseNumero()` comes from `ocr.js`
+- UI: `toast()`, `icon()`
 
 **4. Data** (`data/store.js`)
 - Single source of truth: localStorage
@@ -182,7 +189,7 @@ List options (⋯) also offer: name, store and budget; **Enviar a Recordatorios*
 2. Add items manually (5-step wizard in `openAddItemSheet`) or from comparador. In the wizard, leaving the name step with a phrase that contains numbers calls `interpretarProducto()` (Apple Intelligence) and prefills price, quantity and content; the summary step re-renders from `wizard.datos`
 3. Each item has state: `estimado` → `verificado_en_tienda` → `en_carrito` → `facturado`
 4. Close list when done shopping (records actual total paid)
-5. Items move to historial
+5. The closed list appears in Ahorro → Compras
 
 ### Ahorro (Savings guide, `renderAhorro`)
 
@@ -216,7 +223,7 @@ Each screen has a render function that regenerates HTML from state/store data:
 - `renderCompareRows()` + `renderResultadosComparacion()`
 - `renderEscaner()` + `renderScanTray()`
 - `renderListas()`
-- `renderHistorial()`
+- `renderAhorro()` (tabs: `htmlResumen()`, `htmlPrecios()`, `htmlCompras()`)
 
 These functions:
 1. Query data from `data/store.js`
@@ -333,7 +340,7 @@ Light/dark mode:
    - Data persists (reload page, data still there)
    - Offline works (disable network in DevTools, reload, features still work)
    - Modals open/close correctly
-3. Test OCR: paste a sample receipt label, check if Tesseract extracts text correctly
+3. Test OCR: open `/lab/etiquetas.html` on the local server and upload label photos to see the OCR text and parsed result
 4. Test mobile: use DevTools device emulation (iPhone/Android)
 
 ## Code style notes

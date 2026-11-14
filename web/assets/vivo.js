@@ -2,7 +2,7 @@
  * Barrido en vivo: la cámara analiza el estante en continuo. Este módulo
  * agrupa las líneas que ve el OCR en etiquetas de precio, las parsea y las
  * sigue entre fotogramas para que cada etiqueta se agregue una sola vez.
- * Es lógica pura (sin DOM) para poder probarla en Node: lab/vivo-test.mjs.
+ * Es lógica pura (sin DOM) para poder probarla en Node: tests/vivo-test.mjs.
  */
 
 import { parseEtiqueta, extraerPistas } from "./ocr.js";

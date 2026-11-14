@@ -4,7 +4,7 @@ import UIKit
 
 /// Puente entre la web de Quanto y las capacidades del iPhone.
 /// La web habla con `window.Capacitor.Plugins.QuantoNativo` a través de
-/// data/nativo.js; en Android o web ese módulo usa otras implementaciones.
+/// web/data/nativo.js; en Android o web ese módulo usa otras implementaciones.
 ///
 /// Métodos:
 ///   capacidades()                       -> { vision, codigoBarras, appleIntelligence, plataforma }

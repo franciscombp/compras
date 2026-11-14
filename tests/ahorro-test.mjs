@@ -1,4 +1,4 @@
-// Pruebas del motor de ahorro: node lab/ahorro-test.mjs [ruta-semilla.json]
+// Pruebas del motor de ahorro: node tests/ahorro-test.mjs [ruta-semilla.json]
 // Simula localStorage, construye tres meses de compras en dos tiendas y
 // comprueba memoria de precios, semáforo, frecuentes, tiendas y consejos.
 // Si se pasa una ruta, vuelca el localStorage resultante como semilla para
@@ -11,8 +11,8 @@ globalThis.localStorage = {
   setItem: (k, v) => memoria.set(k, String(v)),
   removeItem: (k) => memoria.delete(k),
 };
-const store = await import("../data/store.js");
-const ahorro = await import("../data/ahorro.js");
+const store = await import("../web/data/store.js");
+const ahorro = await import("../web/data/ahorro.js");
 const { crearLista, guardarProducto, verificarEnTienda, facturarItem, cerrarLista, actualizarLista, setPresupuesto, guardarComparacion, setAjustes, exportarDatos, importarDatos, getPrecios, registrarPrecio } = store;
 const { claveProducto, estadisticasProducto, semaforoPrecio, productosFrecuentes, sugerenciasRecompra, comparativaTiendas, resumenAhorro, consejos, resumenParaCoach } = ahorro;
 

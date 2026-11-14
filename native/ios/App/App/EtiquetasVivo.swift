@@ -1,7 +1,7 @@
 import Foundation
 import CoreGraphics
 
-/// Lógica pura del barrido en vivo, portada de assets/vivo.js: agrupa las
+/// Lógica pura del barrido en vivo, portada de web/assets/vivo.js: agrupa las
 /// líneas que Vision ve en un fotograma en etiquetas de precio y las sigue
 /// entre fotogramas para que cada etiqueta se entregue una sola vez.
 /// Trabaja en coordenadas normalizadas (0-1, origen arriba-izquierda), así

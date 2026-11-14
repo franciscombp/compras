@@ -3,11 +3,11 @@
  * nombres, contenidos y (cuando se puede) precios.
  *
  * Corre en GitHub Actions (ver .github/workflows/actualizar-catalogo.yml)
- * cada semana, o a mano: node lab/fetch-catalogo.mjs
+ * cada semana, o a mano: npm run catalogo
  *
  * Diseño: cada fuente es un "sondeo" que puede fallar sin tumbar el resto.
- * El resultado va a data/catalogo.json y el detalle de qué funcionó a
- * lab/catalogo-report.json (para iterar sobre fuentes reales).
+ * El resultado va a web/data/catalogo.json y el detalle de qué funcionó a
+ * scripts/catalogo-report.json (para iterar sobre fuentes reales).
  *
  * Fuentes:
  *  1. Open Food Facts (ec.openfoodfacts.org) - API pública documentada.
@@ -19,7 +19,7 @@
  *     el listado de productos, trae nombres (precios no publicados).
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { extraerMedidaDeNombre } from "../assets/ocr.js";
+import { extraerMedidaDeNombre } from "../web/assets/ocr.js";
 
 const UA = "QuantoCatalogo/1.0 (app personal de comparación de precios; francisco@maldonado.pro)";
 const TIMEOUT = 15000;
@@ -154,7 +154,7 @@ const productosFinal = [...vistos.values()].slice(0, 4000);
 
 // Si ninguna fuente remota funcionó, conserva el catálogo actual (semilla).
 let catalogoPrevio = { productos: [] };
-try { catalogoPrevio = JSON.parse(readFileSync(new URL("../data/catalogo.json", import.meta.url), "utf8")); } catch {}
+try { catalogoPrevio = JSON.parse(readFileSync(new URL("../web/data/catalogo.json", import.meta.url), "utf8")); } catch {}
 
 const algunaFuenteOk = reporte.fuentes.some((f) => f.ok && f.productos > 0);
 const catalogo = algunaFuenteOk
@@ -162,7 +162,7 @@ const catalogo = algunaFuenteOk
   : catalogoPrevio;
 
 if (algunaFuenteOk) {
-  writeFileSync(new URL("../data/catalogo.json", import.meta.url), JSON.stringify(catalogo));
+  writeFileSync(new URL("../web/data/catalogo.json", import.meta.url), JSON.stringify(catalogo));
   console.log(`Catálogo escrito: ${productosFinal.length} productos`);
 } else {
   console.log("Ninguna fuente respondió: se conserva el catálogo existente.");

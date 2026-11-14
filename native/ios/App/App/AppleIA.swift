@@ -125,7 +125,7 @@ enum AppleIA {
     // MARK: - Coach de ahorro
 
     /// Redacta un consejo semanal breve a partir de los números que calcula
-    /// data/ahorro.js (gasto del mes, tiendas, frecuentes, hallazgos).
+    /// web/data/ahorro.js (gasto del mes, tiendas, frecuentes, hallazgos).
     static func consejo(resumen: String) async throws -> [String: Any]? {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *), disponible() {

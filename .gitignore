@@ -1,2 +1,13 @@
+# Certificados locales para el servidor HTTPS de desarrollo (scripts/servidor-https.py)
 *.pem
+
+# Sistema y editores
 .DS_Store
+.vscode/
+.idea/
+
+# Dependencias y artefactos de build
+node_modules/
+native/dist/
+worker/.wrangler/
+worker/.dev.vars

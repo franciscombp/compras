@@ -1,7 +1,7 @@
 /**
  * Motor de ahorro: convierte la memoria de precios, las listas cerradas y las
  * comparaciones en guía para comprar mejor. Solo lee del store; no toca el
- * DOM, así que se prueba en Node (lab/ahorro-test.mjs).
+ * DOM, así que se prueba en Node (tests/ahorro-test.mjs).
  *
  *  - estadisticasProducto(nombre): lo que sabes de un producto (último, mínimo,
  *    habitual, tiendas, tendencia).

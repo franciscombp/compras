@@ -1,5 +1,5 @@
-// Pruebas del barrido en vivo: node lab/vivo-test.mjs
-import { agruparEtiquetas, Seguimiento, mapearCaja, normalizadoDe } from "../assets/vivo.js";
+// Pruebas del barrido en vivo: node tests/vivo-test.mjs
+import { agruparEtiquetas, Seguimiento, mapearCaja, normalizadoDe } from "../web/assets/vivo.js";
 
 let fallos = 0;
 const ok = (cond, msg) => { console.log(`${cond ? "✓" : "✗"} ${msg}`); if (!cond) fallos++; };

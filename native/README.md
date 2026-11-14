@@ -17,11 +17,11 @@ La misma web de Quanto empaquetada como app iOS. Lo nativo es un plugin
 | Compartir la lista a Notas, Mensajes, WhatsApp… | UIActivityViewController | Listas → ⋯ |
 
 Si Apple Intelligence no está disponible, cada función cae a la lógica local
-(parser de `assets/ocr.js`, textos fijos). Nada sale del teléfono y no cuesta
+(parser de `web/assets/ocr.js`, textos fijos). Nada sale del teléfono y no cuesta
 nada por lectura. El dictado usa el micrófono del teclado de iOS, así que no
 hace falta permiso de micrófono.
 
-Orden de lectores en la app (`leerDatosEtiqueta` en `assets/app.js`):
+Orden de lectores en la app (`leerDatosEtiqueta` en `web/assets/app.js`):
 nativo → lector IA remoto (`worker/`, si está configurado) → Tesseract.
 
 ## Barrido en vivo (cómo funciona)
@@ -32,7 +32,7 @@ La cámara es nativa; el cerebro sigue en la web.
    `BarridoModelo` arma la `AVCaptureSession` (1080p, buffers ya en
    vertical) y pasa cada fotograma a Vision (`.accurate`; baja a `.fast` si
    tarda más de 1,2 s dos veces).
-2. `EtiquetasVivo.swift` (puerto de `assets/vivo.js`) agrupa las líneas por
+2. `EtiquetasVivo.swift` (puerto de `web/assets/vivo.js`) agrupa las líneas por
    cercanía en etiquetas, parte los grupos con dos precios separados
    (etiquetas pegadas en el riel) y `SeguimientoVivo` las empareja con el
    fotograma anterior (posición y, si la cámara saltó, firma). A la segunda
@@ -51,7 +51,7 @@ La cámara es nativa; el cerebro sigue en la web.
 
 El barrido en el WebView (`cicloBarrido` en `app.js`) sigue existiendo como
 alternativa cuando el plugin no ofrece `barridoNativo` (Android, pruebas).
-Pruebas de la lógica sin dispositivo: `node lab/vivo-test.mjs` (la versión
+Pruebas de la lógica sin dispositivo: `npm test` desde la raíz (la versión
 Swift es un puerto línea a línea; conviene añadirle XCTest en el Mac).
 
 ## Recordatorios y Notas
@@ -68,7 +68,7 @@ Swift es un puerto línea a línea; conviene añadirle XCTest en el Mac).
 
 ## Portar a web y Android
 
-Toda la web habla con el dispositivo a través de `data/nativo.js`, que expone
+Toda la web habla con el dispositivo a través de `web/data/nativo.js`, que expone
 `capacidades`, `leerEtiquetaNativa`, `interpretarEtiqueta`,
 `interpretarProducto`, `explicarComparacion`, `redactarConsejo`, `haptico`,
 `mantenerPantalla`, `exportarRecordatorios`, `importarRecordatorios` y `compartir`. En web esas funciones
@@ -103,7 +103,7 @@ En Xcode:
 3. La primera vez, en el iPhone: Ajustes → General → VPN y gestión de
    dispositivos → confía en tu certificado de desarrollador.
 
-Cada vez que cambies la web (`index.html`, `assets/`, `data/`), repite
+Cada vez que cambies la web (carpeta `web/`), repite
 `npm run sync` (o `npm run ios`) y vuelve a ejecutar desde Xcode.
 
 ## Cómo saber qué lector se usó
@@ -131,7 +131,7 @@ native/
         ├── Recordatorios.swift        # EventKit: exportar e importar la lista de compras
         ├── BarridoView.swift          # SwiftUI: cámara a pantalla completa, overlay, controles
         ├── BarridoModelo.swift        # AVCaptureSession + Vision por fotograma + entrega a la web
-        ├── EtiquetasVivo.swift        # Puerto de assets/vivo.js: agrupar etiquetas y seguimiento
+        ├── EtiquetasVivo.swift        # Puerto de web/assets/vivo.js: agrupar etiquetas y seguimiento
         ├── Info.plist                 # permisos de cámara y Recordatorios
         └── Base.lproj/Main.storyboard # usa MainViewController
 ```

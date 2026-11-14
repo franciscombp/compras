@@ -9,7 +9,7 @@ Servidor HTTPS de desarrollo para Quanto.
   y siempre veas la última versión de index.html / app.js / tokens.css.
 - Nunca sirve los certificados ni archivos ocultos.
 
-Uso:  python3 server.py
+Uso:  python3 scripts/servidor-https.py   (o: npm run serve:https)
 """
 
 import http.server
@@ -20,9 +20,10 @@ import sys
 from pathlib import Path
 
 PORT = 4443
-ROOT = Path(__file__).resolve().parent
-CERT = ROOT / "localhost.pem"
-KEY = ROOT / "localhost-key.pem"
+REPO = Path(__file__).resolve().parent.parent
+ROOT = REPO / "web"
+CERT = REPO / "localhost.pem"
+KEY = REPO / "localhost-key.pem"
 
 BLOQUEADOS = (".pem", ".key", ".crt", ".p12")
 
@@ -65,7 +66,7 @@ def main():
         sys.exit(
             "Faltan certificados. Genera con:\n"
             "  mkcert localhost 127.0.0.1 ::1\n"
-            f"y deja localhost.pem / localhost-key.pem en {ROOT}"
+            f"y deja localhost.pem / localhost-key.pem en {REPO}"
         )
 
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)

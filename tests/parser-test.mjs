@@ -1,8 +1,8 @@
 /**
  * Test rápido del parser de etiquetas (sin OCR, texto directo).
- * Correr con: node lab/parser-test.mjs
+ * Correr con: node tests/parser-test.mjs
  */
-import { parseEtiqueta, extraerPistas, extraerMedidaDeNombre } from "../assets/ocr.js";
+import { parseEtiqueta, extraerPistas, extraerMedidaDeNombre } from "../web/assets/ocr.js";
 
 const casos = [
   {

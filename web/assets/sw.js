@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v17-barrido-nativo";
+const CACHE_VERSION = "v18-orden";
 const CACHE_NAME = `quanto-${CACHE_VERSION}`;
 const SCOPE = new URL('.', self.location).pathname;
 

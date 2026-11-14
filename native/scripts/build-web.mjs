@@ -1,5 +1,5 @@
 /**
- * Copia la PWA (raíz del repositorio) a native/dist para que Capacitor la
+ * Copia la PWA (carpeta web/ del repositorio) a native/dist para que Capacitor la
  * empaquete. No hay build: es la misma web que sirve GitHub Pages, sin el
  * Service Worker (dentro de la app nativa no aplica y WKWebView no lo soporta
  * en el esquema capacitor://).
@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
-const raiz = join(aqui, "..", "..");
+const raiz = join(aqui, "..", "..", "web");
 const dist = join(aqui, "..", "dist");
 
 rmSync(dist, { recursive: true, force: true });

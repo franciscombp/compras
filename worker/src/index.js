@@ -3,7 +3,7 @@
  *
  * La PWA manda la foto de la etiqueta (JPEG en base64) y este Worker se la
  * pasa a Claude con salida estructurada. Devuelve el mismo objeto que el
- * parser local (assets/ocr.js): { precio, contenido, unidad, unidades, nombre }
+ * parser local (web/assets/ocr.js): { precio, contenido, unidad, unidades, nombre }
  * más una `confianza` para que la app decida si confía en la lectura.
  *
  * La API key vive aquí como secreto, nunca en la app ni en el repositorio.

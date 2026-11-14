@@ -4,7 +4,7 @@ import CoreGraphics
 
 /// OCR y código de barras con Vision, en el dispositivo.
 /// Devuelve el texto por líneas y cada palabra con su caja en píxeles, con
-/// la misma forma que las palabras de Tesseract: assets/ocr.js usa el alto
+/// la misma forma que las palabras de Tesseract: web/assets/ocr.js usa el alto
 /// de cada palabra para saber cuál es el precio (el número más grande).
 enum LectorEtiqueta {
 

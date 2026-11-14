@@ -2,7 +2,7 @@
  * Capa de APIs externas y catálogo local.
  *
  * - searchProduct(nombre): busca en data/catalogo.json (descargado cada
- *   semana por GitHub Actions, ver lab/fetch-catalogo.mjs). Funciona
+ *   semana por GitHub Actions, ver scripts/fetch-catalogo.mjs). Funciona
  *   offline una vez cacheado por el Service Worker.
  * - searchByBarcode(code): consulta Open Food Facts (API pública con CORS)
  *   y cae al catálogo local si no hay conexión.

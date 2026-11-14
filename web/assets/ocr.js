@@ -1,7 +1,7 @@
 /**
  * Lectura de etiquetas: preprocesado de imagen + parser del texto OCR.
  * Módulo compartido entre la app (assets/app.js) y el laboratorio de
- * pruebas (lab/etiquetas.html) para que ambos usen exactamente la misma
+ * pruebas (web/lab/etiquetas.html) para que ambos usen exactamente la misma
  * lógica.
  */
 
