@@ -1,0 +1,14 @@
+name = "quanto-lector"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Orígenes que pueden llamar al lector (separados por coma).
+ORIGENES_PERMITIDOS = "https://franciscombp.github.io,http://localhost:8000"
+# Modelo de Claude. claude-opus-5-5 lee mejor; claude-haiku-5-5 cuesta ~40x menos.
+MODELO = "claude-opus-5-5"
+
+# Secretos (no van aquí, se cargan con `npx wrangler secret put <NOMBRE>`):
+#   ANTHROPIC_API_KEY  - obligatorio
+#   LECTOR_TOKEN       - opcional: si existe, la app debe enviarlo como Bearer

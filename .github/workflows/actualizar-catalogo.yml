@@ -20,16 +20,16 @@ jobs:
           node-version: 20
 
       - name: Descargar catálogo desde las fuentes
-        run: node lab/fetch-catalogo.mjs
+        run: node scripts/fetch-catalogo.mjs
 
       - name: Mostrar reporte de fuentes
-        run: cat lab/catalogo-report.json
+        run: cat scripts/catalogo-report.json
 
       - name: Commit si hay cambios
         run: |
           git config user.name "catalogo-bot"
           git config user.email "actions@github.com"
-          git add data/catalogo.json lab/catalogo-report.json
+          git add web/data/catalogo.json scripts/catalogo-report.json
           if git diff --cached --quiet; then
             echo "Sin cambios en el catálogo."
           else

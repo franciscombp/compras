@@ -1,0 +1,19 @@
+{
+  "name": "quanto-lector",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lector de etiquetas de Quanto: recibe la foto y devuelve precio/contenido en JSON",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run --outdir=.wrangler/dist"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

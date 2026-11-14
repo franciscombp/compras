@@ -1,54 +1,55 @@
 # Quanto — Precio justo, sin trucos
 
-Compara el precio real de productos por 100 g/ml y lleva tus listas de compra con memoria de precios.
+Guía personal de ahorro para el súper. Compara el precio real por 100 g o 100 ml, lleva tus listas con presupuesto y recuerda cada precio que ves o pagas para decirte si hoy conviene comprar, dónde sale más barato y qué te toca reponer.
 
-## Características
+**En vivo:** https://franciscombp.github.io/compras/
 
-- **Comparador manual**: Ingresa precio, contenido y cantidad de envases; calcula automáticamente el costo por 100 g/ml.
-- **Escáner con OCR**: Captura etiquetas de productos y extrae precio + contenido (entiende packs, ofertas, precios unitarios ya impresos).
-- **Listas de compra**: Guarda items con estado de compra, verifica precios en tienda vs estimado.
-- **Historial**: Cierra compras, ve cuánto pagaste de verdad vs lo que esperabas.
-- **Offline**: PWA con cache; funciona sin conexión una vez instalada.
+## Qué hace
 
-## 🚀 En Producción
+- **Comparar**: a mano o con la cámara. En el iPhone, el modo *Barrido* detecta todas las etiquetas del estante a la vez y marca la mejor compra.
+- **Listas**: precio por 100 g y semáforo (buen precio, habitual, caro) en cada item, presupuesto con barra en vivo, envío a Recordatorios y a Notas.
+- **Ahorro**: gasto del mes, cuánto ahorraste comparando, dónde compras más barato, qué subió de precio y consejos concretos.
+- **Sin cuenta ni servidor**: todo se guarda en el dispositivo. Funciona sin conexión.
+- **Apple Intelligence** (app de iPhone): lee etiquetas, entiende productos dictados y explica cada veredicto, sin que nada salga del teléfono.
 
-**Live**: https://franciscombp.github.io/compras/
+## Estructura del repositorio
 
-Actualiza automáticamente en GitHub Pages cada vez que hagas `git push origin main`.
-
-Ver [`DEPLOY.md`](./DEPLOY.md) para configuración completa y flujo de desarrollo.
-
-## Instalación como PWA
-
-1. Abre la app en un navegador (ej: Chrome Mobile)
-2. Toca el menú (⋮) → "Instalar" o "Agregar a pantalla principal"
-3. La app se instala como app nativa con icono y acceso offline
-
-## Desarrollo local
-
-```bash
-# Servidor estático (Python)
-python3 -m http.server 8000
-
-# O Node.js (con http-server si lo tienes)
-npx http-server
+```
+compras/
+├── web/          App web (PWA). Es lo que se publica en GitHub Pages.
+│   ├── index.html, manifest.json
+│   ├── assets/   Interfaz (app.js), lector de etiquetas (ocr.js), barrido (vivo.js), estilos, service worker
+│   ├── data/     Datos y lógica: store.js, ahorro.js, api.js, nativo.js, catalogo.json
+│   └── lab/      Herramienta interna para probar el lector con fotos (etiquetas.html)
+├── native/       App de iPhone: Capacitor + Swift (Vision, Apple Intelligence, cámara SwiftUI)
+├── worker/       Opcional: Cloudflare Worker que lee etiquetas con Claude
+├── tests/        Pruebas de la lógica en Node (parser, barrido, motor de ahorro)
+├── scripts/      Catálogo semanal y servidor HTTPS de desarrollo
+├── docs/         Arquitectura, desarrollo, despliegue y contrato de API
+└── .github/      Publicación en Pages y bot del catálogo
 ```
 
-Luego abre `http://localhost:8000/`.
+## Empezar en local
 
-## Estructura
+Necesitas Git, Python 3 y Node 22 o superior.
 
-- `index.html` — marcado principal con 5 pantallas
-- `assets/app.js` — lógica de UI, comparador, escáner OCR
-- `assets/tokens.css` — design system (colores, tipografía, componentes)
-- `data/store.js` — capa de datos (localStorage + sync queue)
-- `assets/sw.js` — service worker para cache y offline
-- `manifest.json` — metadatos PWA
+```bash
+git clone https://github.com/franciscombp/compras.git
+cd compras
+npm run serve     # http://localhost:8000
+npm test          # pruebas de la lógica
+```
 
-## Sin dependencias
+No hay que instalar nada para la web: es HTML y JavaScript sin build.
 
-HTML + JavaScript puro. El OCR (Tesseract) se carga bajo demanda desde CDN. Sin build, sin node_modules.
+- **Probar la cámara desde el teléfono**: hace falta HTTPS. Ver `docs/desarrollo.md`.
+- **App de iPhone** (en un Mac con Xcode): `npm run ios`. Detalles en `native/README.md`.
+- **Lector con Claude** (opcional): `worker/README.md`.
 
-## Licencia
+## Documentación
 
-Mírale el corazón.
+- `docs/desarrollo.md`: cómo trabajar en el proyecto, ramas, pruebas.
+- `docs/despliegue.md`: cómo se publica la web y el catálogo semanal.
+- `docs/arquitectura.md`: capas, flujos y datos.
+- `docs/api-contract.md`: contrato del backend futuro.
+- `CLAUDE.md`: guía técnica detallada para trabajar con Claude Code.
