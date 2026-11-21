@@ -121,20 +121,74 @@ function sheetFocusables() {
     .filter((el) => !el.disabled && el.offsetParent !== null);
 }
 
-function openSheet(html) {
-  sheetLastFocused = document.activeElement;
-  sheetContent.innerHTML = html;
-  sheet.classList.add("open");
-  scrim.classList.add("open");
-  const titulo = $(".sheet-title", sheetContent);
-  sheet.setAttribute("aria-label", titulo ? titulo.textContent.trim() : "Panel de acciones");
-  setTimeout(() => { if (sheet.classList.contains("open")) sheetFocusables()[0]?.focus(); }, 80);
+// Bloqueo del scroll de fondo. overflow:hidden en body no basta en iPhone (la
+// página sigue moviéndose detrás de la hoja), así que el body se fija en su
+// posición actual y se devuelve a ella al cerrar.
+let scrollBloqueado = null;
+function bloquearScroll() {
+  if (scrollBloqueado !== null) return;
+  scrollBloqueado = window.scrollY || window.pageYOffset || 0;
+  const b = document.body.style;
+  b.position = "fixed"; b.top = `-${scrollBloqueado}px`; b.left = "0"; b.right = "0"; b.width = "100%";
+  document.documentElement.classList.add("hoja-abierta");
+}
+function desbloquearScroll({ restaurar = true } = {}) {
+  if (scrollBloqueado === null) return;
+  const y = scrollBloqueado;
+  scrollBloqueado = null;
+  const b = document.body.style;
+  b.position = ""; b.top = ""; b.left = ""; b.right = ""; b.width = "";
+  document.documentElement.classList.remove("hoja-abierta");
+  if (restaurar) window.scrollTo(0, y);
 }
 
-function closeSheet() {
+// Teclado en pantalla: visualViewport dice cuánto alto queda visible. La hoja
+// usa --alto-visible como máximo y sube --teclado px para quedar encima.
+function ajustarAlTeclado() {
+  const vv = window.visualViewport;
+  const raiz = document.documentElement.style;
+  if (!vv) { raiz.setProperty("--alto-visible", `${window.innerHeight}px`); return; }
+  const teclado = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+  raiz.setProperty("--alto-visible", `${Math.round(vv.height)}px`);
+  raiz.setProperty("--teclado", `${teclado > 60 ? teclado : 0}px`);
+}
+ajustarAlTeclado();
+window.visualViewport?.addEventListener("resize", ajustarAlTeclado);
+window.visualViewport?.addEventListener("scroll", ajustarAlTeclado);
+window.addEventListener("resize", ajustarAlTeclado);
+window.addEventListener("orientationchange", () => setTimeout(ajustarAlTeclado, 250));
+
+// Al enfocar un campo dentro de la hoja, que quede a la vista sobre el teclado
+sheet.addEventListener("focusin", (e) => {
+  if (!e.target.matches("input, textarea, select")) return;
+  setTimeout(() => { try { e.target.scrollIntoView({ block: "center", behavior: "smooth" }); } catch { e.target.scrollIntoView(); } }, 300);
+});
+
+const pantallaTactil = window.matchMedia?.("(pointer: coarse)").matches;
+
+function openSheet(html) {
+  if (!sheet.classList.contains("open")) sheetLastFocused = document.activeElement;
+  sheetContent.innerHTML = html;
+  sheet.scrollTop = 0;
+  sheet.classList.add("open");
+  scrim.classList.add("open");
+  bloquearScroll();
+  const titulo = $(".sheet-title", sheetContent);
+  sheet.setAttribute("aria-label", titulo ? titulo.textContent.trim() : "Panel de acciones");
+  // En táctil no se enfoca un campo de texto al abrir: abriría el teclado solo
+  setTimeout(() => {
+    if (!sheet.classList.contains("open")) return;
+    const primero = sheetFocusables().find((el) => !pantallaTactil || !el.matches("input, textarea, select"));
+    (primero || sheet).focus({ preventScroll: true });
+  }, 80);
+}
+
+function closeSheet({ restaurarScroll = true } = {}) {
+  const estabaAbierta = sheet.classList.contains("open");
   sheet.classList.remove("open");
   scrim.classList.remove("open");
-  if (sheetLastFocused && document.body.contains(sheetLastFocused)) sheetLastFocused.focus();
+  desbloquearScroll({ restaurar: restaurarScroll });
+  if (estabaAbierta && sheetLastFocused && document.body.contains(sheetLastFocused)) sheetLastFocused.focus({ preventScroll: true });
   sheetLastFocused = null;
 }
 scrim.addEventListener("click", closeSheet);
@@ -158,6 +212,7 @@ document.addEventListener("keydown", (e) => {
 const main = $("main");
 
 function goto(view) {
+  if (sheet.classList.contains("open")) closeSheet({ restaurarScroll: false });
   if (state.view === "escanear" && view !== "escanear") detenerCamara();
   if (view === "escanear" && state.view !== "escanear") state.scanReturnTo = state.view;
   state.view = view;
@@ -934,7 +989,7 @@ function renderProblemaCamara(codigo) {
   const p = PROBLEMAS_CAMARA[codigo] || PROBLEMAS_CAMARA.generico;
   $("#scanStage").innerHTML = `
     <div class="card camera-problem" role="alert">
-      <div class="icon-circle" style="margin-bottom:12px; background:var(--danger-soft); color:var(--danger); border-color:color-mix(in oklab, var(--danger) 30%, transparent)">${icon("alert")}</div>
+      <div class="icon-circle" style="margin-bottom:12px; background:var(--danger-soft); color:var(--danger); border-color:rgba(var(--danger-rgb), .3)">${icon("alert")}</div>
       <p class="problem-title">${p.titulo}</p>
       <p class="problem-body">${p.cuerpo}</p>
       <div class="button-col" style="margin-top:16px">
@@ -1043,7 +1098,7 @@ async function iniciarEscaneo() {
   $("#scanCapture")?.addEventListener("click", () => capturarEtiqueta());
   $("#autoChip")?.addEventListener("click", () => setAuto(!scanSession.auto));
   $("#barridoPausa")?.addEventListener("click", () => setBarridoPausa(!barrido.pausado));
-  $("#scanOverlay")?.addEventListener("pointerdown", tocarOverlay);
+  $("#scanOverlay")?.addEventListener("click", tocarOverlay);
 }
 
 // ------------------------- Barrido con cámara nativa -------------------------

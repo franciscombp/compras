@@ -18,6 +18,17 @@
 
 let catalogoPromise = null;
 
+/**
+ * Señal que aborta un fetch tras `ms`. AbortSignal.timeout() no existe en
+ * Safari < 16 ni Chrome < 103: ahí se arma con un AbortController.
+ */
+function senalConTiempo(ms) {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") return AbortSignal.timeout(ms);
+  const c = new AbortController();
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
+}
+
 function getCatalogo() {
   if (!catalogoPromise) {
     catalogoPromise = fetch("./data/catalogo.json", { cache: "no-cache" })
@@ -115,7 +126,7 @@ export const services = {
     try {
       const res = await fetch(
         `https://world.openfoodfacts.org/api/v2/product/${limpio}.json?fields=product_name_es,product_name,brands,quantity`,
-        { signal: AbortSignal.timeout(6000) }
+        { signal: senalConTiempo(6000) }
       );
       if (res.ok) {
         const data = await res.json();
@@ -156,10 +167,10 @@ export const services = {
         method: "POST",
         headers,
         body: JSON.stringify({ imagen: canvasABase64(canvas), tipo: "image/jpeg" }),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: senalConTiempo(timeoutMs),
       });
     } catch (e) {
-      throw Object.assign(new Error("conexion"), { codigo: e?.name === "TimeoutError" ? "timeout" : "conexion" });
+      throw Object.assign(new Error("conexion"), { codigo: e?.name === "TimeoutError" || e?.name === "AbortError" ? "timeout" : "conexion" });
     }
 
     let data = null;

@@ -250,7 +250,8 @@ export function parseEtiqueta(texto, pistas = {}) {
   }
 
   // --- Código impreso en la etiqueta (EAN sin dígito de control) ------------
-  const codImpreso = texto.match(/(?<!\d)(\d{12,13})(?!\d)/);
+  // (sin lookbehind: Safari anterior a 16.4 no lo entiende y tumbaría el módulo)
+  const codImpreso = texto.match(/(?:^|\D)(\d{12,13})(?!\d)/);
   const codigo = codImpreso ? completarEAN(codImpreso[1]) : null;
 
   // --- Nombre ----------------------------------------------------------------
