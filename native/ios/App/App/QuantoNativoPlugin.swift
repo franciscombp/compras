@@ -8,7 +8,8 @@ import UIKit
 ///
 /// Métodos:
 ///   capacidades()                       -> { vision, codigoBarras, appleIntelligence, plataforma }
-///   leerEtiqueta({ imagen, ia, rapido }) -> { texto, lineas, palabras, codigo, ia, iaEstado }
+///   leerEtiqueta({ imagen, ia, rapido, marco }) -> { texto, lineas, palabras, codigo, marco, ia, iaEstado }
+///     (marco: true por defecto; busca el rectángulo de la etiqueta y lee solo dentro)
 ///   interpretarEtiqueta({ texto })      -> datos de la etiqueta | { ia: null }
 ///   interpretarProducto({ frase })      -> { nombre, cantidad, precio, contenido, unidad } | { ia: null }
 ///   explicarComparacion({ resumen })    -> { titulo, explicacion } | { ia: null }
@@ -72,11 +73,12 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         let usarIA = call.getBool("ia") ?? true
         let rapido = call.getBool("rapido") ?? false
+        let marco = call.getBool("marco") ?? true
 
         DispatchQueue.global(qos: .userInitiated).async {
             let lectura: LectorEtiqueta.Lectura
             do {
-                lectura = try LectorEtiqueta.leer(cg, rapido: rapido)
+                lectura = try LectorEtiqueta.leer(cg, rapido: rapido, marco: marco)
             } catch {
                 call.reject("vision: \(error.localizedDescription)")
                 return
@@ -87,6 +89,7 @@ public class QuantoNativoPlugin: CAPPlugin, CAPBridgedPlugin {
                 "lineas": lectura.lineas,
                 "palabras": lectura.palabras,
                 "codigo": lectura.codigo ?? NSNull(),
+                "marco": lectura.marco.map { $0.map { ["x": $0.x, "y": $0.y] } } ?? NSNull(),
                 "motor": "vision",
                 "ia": NSNull(),
                 "iaEstado": usarIA ? "no_disponible" : "desactivada",

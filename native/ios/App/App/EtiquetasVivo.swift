@@ -74,6 +74,9 @@ struct Region {
     let lineas: [LineaOCR]
     let texto: String
     let precio: Double
+    /// Esquinas del rectángulo de la etiqueta (Vision, origen abajo-izquierda;
+    /// tl, tr, br, bl) cuando la región viene de un marco detectado.
+    var marco: [CGPoint]? = nil
     var palabras: [PalabraOCR] { lineas.flatMap { $0.palabras } }
 }
 
@@ -149,6 +152,23 @@ enum EtiquetasVivo {
         let caja = orden.dropFirst().reduce(orden[0].caja) { $0.union($1.caja) }
         let vr = orden.dropFirst().reduce(orden[0].visionRect) { $0.union($1.visionRect) }
         return Region(caja: caja, visionRect: vr, lineas: orden, texto: orden.map(\.text).joined(separator: "\n"), precio: precio)
+    }
+
+    /// Una región por rectángulo de etiqueta detectado: solo el texto cuyo
+    /// centro cae dentro del rectángulo cuenta; lo de fuera se ignora. Los
+    /// rectángulos sin precio dentro no son etiquetas (cajas, carteles).
+    static func porMarcos(_ lineas: [LineaOCR], marcos: [[CGPoint]]) -> [Region] {
+        var regiones: [Region] = []
+        for e in marcos {
+            let dentro = lineas.filter { l in
+                MarcoEtiqueta.contiene(e, CGPoint(x: l.visionRect.midX, y: l.visionRect.midY))
+            }
+            guard !dentro.isEmpty, let base = construir(dentro) else { continue }
+            let vr = MarcoEtiqueta.caja(e)
+            regiones.append(Region(caja: Caja(vision: vr), visionRect: vr, lineas: base.lineas,
+                                   texto: base.texto, precio: base.precio, marco: e))
+        }
+        return regiones.sorted { $0.caja.x0 < $1.caja.x0 }
     }
 
     /// Firma estable de una etiqueta: precio + primera palabra con letras.
@@ -250,5 +270,10 @@ final class SeguimientoVivo {
     func reiniciar() {
         pistas.removeAll()
         entregadas.removeAll()
+    }
+
+    /// Olvida lo que está a la vista pero recuerda lo ya entregado.
+    func reiniciarPistas() {
+        pistas.removeAll()
     }
 }

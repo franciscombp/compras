@@ -16,6 +16,8 @@ final class BarridoModelo: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         let caja: Caja
         let precio: Double
         let confirmada: Bool
+        /// Esquinas del marco en pantalla normalizada (origen arriba-izquierda), si lo hay.
+        let marco: [CGPoint]?
     }
 
     struct Chip {
@@ -30,6 +32,9 @@ final class BarridoModelo: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     @Published var estado = "Buscando etiquetas de precio…"
     @Published var contador = 0
     @Published var sinPermiso = false
+    /// Como el escáner de documentos: solo se lee el texto dentro del
+    /// rectángulo de cada etiqueta. Apagado, se agrupa todo el texto visible.
+    @Published var soloMarco = true
 
     var alConfirmar: (([String: Any]) -> Void)?
     var alTocar: ((String) -> Void)?
@@ -47,6 +52,8 @@ final class BarridoModelo: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private var lentos = 0
     private var dimensiones = CGSize(width: 1080, height: 1920)
     private var ultimaPublicacion: TimeInterval = 0
+    private var ultimoBuffer: CVPixelBuffer?
+    private var sinMarcoDesde: TimeInterval?
 
     override init() {
         capaPreview = AVCaptureVideoPreviewLayer(session: sesion)
@@ -102,6 +109,12 @@ final class BarridoModelo: NSObject, ObservableObject, AVCaptureVideoDataOutputS
 
     // MARK: - Controles
 
+    func alternarMarco() {
+        soloMarco.toggle()
+        colaVideo.async { [weak self] in self?.seguimiento.reiniciarPistas() }
+        estado = soloMarco ? "Solo leo lo que está dentro de cada etiqueta." : "Modo libre: leo todo el texto que vea."
+    }
+
     func alternarPausa() {
         pausado.toggle()
         estado = pausado ? "En pausa: toca una etiqueta para agregarla o revisarla." : resumen()
@@ -147,8 +160,15 @@ final class BarridoModelo: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         }
         colaVideo.async { [weak self] in
             guard let self = self, let p = self.seguimiento.confirmar(id: v.id) else { return }
-            self.entregar(p, pixelBuffer: nil)
+            self.entregar(p, pixelBuffer: self.ultimoBuffer)
         }
+    }
+
+    /// Punto normalizado (origen arriba-izquierda) a coordenadas de pantalla, con el video en aspect-fill.
+    func puntoEnPantalla(_ p: CGPoint, tamano: CGSize) -> CGPoint {
+        let escala = max(tamano.width / dimensiones.width, tamano.height / dimensiones.height)
+        let w = dimensiones.width * escala, h = dimensiones.height * escala
+        return CGPoint(x: (tamano.width - w) / 2 + p.x * w, y: (tamano.height - h) / 2 + p.y * h)
     }
 
     func rectEnPantalla(_ c: Caja, tamano: CGSize) -> CGRect {
@@ -185,13 +205,16 @@ final class BarridoModelo: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             dimensiones = d
         }
 
+        ultimoBuffer = pb
         let req = VNRecognizeTextRequest()
         req.recognitionLevel = nivelRapido ? .fast : .accurate
         req.recognitionLanguages = ["es-ES", "en-US"]
         req.usesLanguageCorrection = true
+        let rectReq = MarcoEtiqueta.peticion(maximo: 10)
+        let usarMarco = soloMarco
         let t0 = CACurrentMediaTime()
         let handler = VNImageRequestHandler(cvPixelBuffer: pb, orientation: .up, options: [:])
-        guard (try? handler.perform([req])) != nil else { return }
+        guard (try? handler.perform(usarMarco ? [req, rectReq] : [req])) != nil else { return }
         let duracion = CACurrentMediaTime() - t0
         if duracion > 1.2 && !nivelRapido { lentos += 1; if lentos >= 2 { nivelRapido = true } }
 
@@ -209,12 +232,30 @@ final class BarridoModelo: NSObject, ObservableObject, AVCaptureVideoDataOutputS
             return LineaOCR(text: texto, caja: Caja(vision: obs.boundingBox), visionRect: obs.boundingBox, palabras: palabras)
         }
 
-        let regiones = EtiquetasVivo.agrupar(lineas)
         let ahora = CACurrentMediaTime()
+        let regiones: [Region]
+        if usarMarco {
+            let marcos = (rectReq.results ?? []).map(MarcoEtiqueta.esquinas)
+            regiones = EtiquetasVivo.porMarcos(lineas, marcos: marcos)
+            // Si pasan 2 s sin ver el borde de ninguna etiqueta, se sugiere el modo libre.
+            if marcos.isEmpty {
+                if sinMarcoDesde == nil { sinMarcoDesde = ahora }
+                if let d = sinMarcoDesde, ahora - d > 2, !lineas.isEmpty, contador == 0 {
+                    DispatchQueue.main.async { self.estado = "No veo el borde de la etiqueta: acércate, o toca Marco para leer libre." }
+                }
+            } else {
+                sinMarcoDesde = nil
+            }
+        } else {
+            regiones = EtiquetasVivo.agrupar(lineas)
+        }
         let (visibles, nuevas) = seguimiento.actualizar(regiones, ahora: ahora)
         for p in nuevas { entregar(p, pixelBuffer: pb) }
 
-        let lista = visibles.map { Vista(id: $0.id, caja: $0.caja, precio: $0.region.precio, confirmada: $0.confirmada) }
+        let lista = visibles.map {
+            Vista(id: $0.id, caja: $0.caja, precio: $0.region.precio, confirmada: $0.confirmada,
+                  marco: $0.region.marco.map(MarcoEtiqueta.esquinasPantalla))
+        }
         if ahora - ultimaPublicacion > 0.05 || !nuevas.isEmpty {
             ultimaPublicacion = ahora
             DispatchQueue.main.async {
@@ -228,18 +269,38 @@ final class BarridoModelo: NSObject, ObservableObject, AVCaptureVideoDataOutputS
     private func entregar(_ p: SeguimientoVivo.Pista, pixelBuffer: CVPixelBuffer?) {
         let r = p.region
         let w = Double(dimensiones.width), h = Double(dimensiones.height)
-        let palabras: [[String: Any]] = r.palabras.map {
+        var palabras: [[String: Any]] = r.palabras.map {
             ["text": $0.text, "bbox": ["x0": $0.caja.x0 * w, "y0": $0.caja.y0 * h, "x1": $0.caja.x1 * w, "y1": $0.caja.y1 * h]]
         }
+        var texto = r.texto
+        var lineasTexto = r.lineas.map(\.text)
+        var mini: String? = nil
+
+        // Con marco: la etiqueta se endereza y se relee con precisión, sola.
+        if let e = r.marco, let pb = pixelBuffer,
+           let recto = MarcoEtiqueta.enderezar(CIImage(cvPixelBuffer: pb), esquinas: e),
+           let cg = contextoCI.createCGImage(recto, from: recto.extent) {
+            if let lectura = try? LectorEtiqueta.reconocer(cg, rapido: false),
+               lectura.texto.rangeOfCharacter(from: .decimalDigits) != nil {
+                texto = lectura.texto
+                lineasTexto = lectura.lineas.compactMap { $0["text"] as? String }
+                palabras = lectura.palabras
+            }
+            mini = jpegMiniatura(UIImage(cgImage: cg))
+        } else if let pb = pixelBuffer {
+            mini = miniatura(pb, rect: r.visionRect)
+        }
+
         var datos: [String: Any] = [
             "id": p.id,
-            "texto": r.texto,
+            "texto": texto,
             "precio": r.precio,
-            "lineas": r.lineas.map(\.text),
+            "lineas": lineasTexto,
             "palabras": palabras,
             "caja": ["x0": r.caja.x0, "y0": r.caja.y0, "x1": r.caja.x1, "y1": r.caja.y1],
+            "marco": r.marco != nil,
         ]
-        if let pb = pixelBuffer, let mini = miniatura(pb, rect: r.visionRect) { datos["miniatura"] = mini }
+        if let m = mini { datos["miniatura"] = m }
         DispatchQueue.main.async {
             self.contador += 1
             self.estado = "Agregada: $\(String(format: "%.2f", r.precio))"
@@ -256,7 +317,10 @@ final class BarridoModelo: NSObject, ObservableObject, AVCaptureVideoDataOutputS
         let pad = max(8, r.height * 0.25)
         r = r.insetBy(dx: -pad, dy: -pad).intersection(ext)
         guard !r.isEmpty, let cg = contextoCI.createCGImage(ci.cropped(to: r), from: r) else { return nil }
-        let img = UIImage(cgImage: cg)
+        return jpegMiniatura(UIImage(cgImage: cg))
+    }
+
+    private func jpegMiniatura(_ img: UIImage) -> String? {
         let lado: CGFloat = 220
         let escala = min(1, lado / max(img.size.width, 1))
         let tam = CGSize(width: img.size.width * escala, height: img.size.height * escala)

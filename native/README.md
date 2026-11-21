@@ -6,6 +6,7 @@ La misma web de Quanto empaquetada como app iOS. Lo nativo es un plugin
 | Capacidad | Framework | Dónde se usa |
 |---|---|---|
 | **Barrido en vivo con cámara nativa**: SwiftUI + AVFoundation; Vision lee cada fotograma sin pasar por el WebView, overlay a 60 fps, linterna, enfoque por toque | `BarridoView`, `BarridoModelo`, `EtiquetasVivo` | Comparar con cámara, modo por defecto |
+| **Marco de la etiqueta**, como el escáner de documentos: detecta el rectángulo, lo endereza y lee solo lo de adentro | Vision (`VNDetectRectanglesRequest`) + Core Image (`CIPerspectiveCorrection`) | Captura y Barrido |
 | OCR de etiquetas con cajas por palabra y por línea | Vision | Comparar con cámara |
 | Código de barras (EAN/UPC) | Vision | Completa nombre y contenido desde Open Food Facts o el catálogo |
 | Interpretar la etiqueta (precio, contenido, pack, nombre) | Apple Intelligence (Foundation Models, iOS 26+) | Comparar con cámara |
@@ -126,7 +127,8 @@ native/
     └── App/
         ├── MainViewController.swift   # registra el plugin en el puente de Capacitor
         ├── QuantoNativoPlugin.swift   # métodos expuestos a la web (window.Capacitor.Plugins.QuantoNativo)
-        ├── LectorEtiqueta.swift       # Vision: OCR con cajas por palabra + código de barras
+        ├── LectorEtiqueta.swift       # Vision: OCR dentro del marco de la etiqueta + código de barras
+        ├── MarcoEtiqueta.swift        # Rectángulos de etiqueta, punto dentro del marco, perspectiva
         ├── AppleIA.swift              # Foundation Models: etiqueta, producto dictado, veredicto
         ├── Recordatorios.swift        # EventKit: exportar e importar la lista de compras
         ├── BarridoView.swift          # SwiftUI: cámara a pantalla completa, overlay, controles

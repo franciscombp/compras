@@ -6,7 +6,7 @@
   "scripts": {
     "serve": "python3 -m http.server 8000 --directory web",
     "serve:https": "python3 scripts/servidor-https.py",
-    "test": "node tests/parser-test.mjs && node tests/vivo-test.mjs && node tests/ahorro-test.mjs",
+    "test": "node tests/parser-test.mjs && node tests/vivo-test.mjs && node tests/marco-test.mjs && node tests/ahorro-test.mjs",
     "catalogo": "node scripts/fetch-catalogo.mjs",
     "ios": "npm --prefix native install && npm --prefix native run ios",
     "worker:dev": "npm --prefix worker install && npm --prefix worker run dev"

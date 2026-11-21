@@ -31,6 +31,7 @@ struct BarridoView: View {
                 HStack(spacing: 10) {
                     boton("xmark", etiqueta: "Listo") { modelo.alCerrar?() }
                     Spacer()
+                    boton("viewfinder", etiqueta: modelo.soloMarco ? "Marco" : "Libre", activo: modelo.soloMarco) { modelo.alternarMarco() }
                     boton(modelo.linterna ? "flashlight.on.fill" : "flashlight.off.fill", etiqueta: "Linterna", activo: modelo.linterna) { modelo.alternarLinterna() }
                     boton(modelo.pausado ? "play.fill" : "pause.fill", etiqueta: modelo.pausado ? "Seguir" : "Pausa", activo: modelo.pausado) { modelo.alternarPausa() }
                 }
@@ -45,7 +46,9 @@ struct BarridoView: View {
                     } else {
                         Text(modelo.estado)
                     }
-                    Text("Pasea la cámara por el estante. Toca una etiqueta para agregarla ya o revisarla.")
+                    Text(modelo.soloMarco
+                         ? "Pasea la cámara por el estante. Leo solo lo que está dentro de cada etiqueta; toca una para agregarla o revisarla."
+                         : "Modo libre: leo todo el texto visible. Toca una etiqueta para agregarla o revisarla.")
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.75))
                 }
@@ -84,8 +87,17 @@ struct BarridoView: View {
             let chip = modelo.chips[v.id]
             let esMejor = chip?.estado == "mejor"
             let color: Color = esMejor ? verde : v.confirmada ? .white : .white.opacity(0.6)
-            let trazo = StrokeStyle(lineWidth: esMejor ? 3 : 2, dash: v.confirmada ? [] : [6, 5])
-            ctx.stroke(Path(roundedRect: r, cornerRadius: 10), with: .color(color), style: trazo)
+            let trazo = StrokeStyle(lineWidth: esMejor ? 3 : 2, lineJoin: .round, dash: v.confirmada ? [] : [6, 5])
+            if let m = v.marco, m.count == 4 {
+                // Como el escáner de documentos: el borde real de la etiqueta, relleno translúcido.
+                var forma = Path()
+                forma.addLines(m.map { modelo.puntoEnPantalla($0, tamano: tam) })
+                forma.closeSubpath()
+                ctx.fill(forma, with: .color((esMejor ? verde : Color.white).opacity(v.confirmada ? 0.22 : 0.10)))
+                ctx.stroke(forma, with: .color(color), style: trazo)
+            } else {
+                ctx.stroke(Path(roundedRect: r, cornerRadius: 10), with: .color(color), style: trazo)
+            }
 
             let texto: String
             if let c = chip {

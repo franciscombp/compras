@@ -64,7 +64,7 @@
 <body>
 <div class="wrap">
   <h1><small>Quanto · interno</small><br>Laboratorio de etiquetas</h1>
-  <p class="sub">Sube fotos de etiquetas de góndola para ver qué lee el OCR y qué extrae el parser. Sirve para saber qué etiquetas funcionan y cuáles no.</p>
+  <p class="sub">Sube fotos o capturas de etiquetas de góndola para ver qué etiqueta detecta, qué lee el OCR dentro de ella y qué extrae el parser. Sirve para saber qué etiquetas funcionan y cuáles no.</p>
 
   <div class="panel">
     <div class="drop" id="drop">
@@ -73,6 +73,7 @@
       <input type="file" id="file" accept="image/*" multiple hidden>
     </div>
     <div class="opts">
+      <label><input type="checkbox" id="optMarco" checked> Detectar la etiqueta y leer solo eso (como el escáner)</label>
       <label><input type="checkbox" id="optPre" checked> Preprocesar imagen (gris + contraste)</label>
       <label>Segmentación:
         <select id="optPsm">
@@ -109,6 +110,7 @@
 
 <script type="module">
 import { parseEtiqueta, parseLectura, extraerPistas, preprocesarEtiqueta } from "../assets/ocr.js";
+import { detectarEtiquetas, escalarCaja } from "../assets/marco.js";
 
 const $ = (s) => document.querySelector(s);
 const status = (m) => { $("#status").textContent = m; };
@@ -155,6 +157,53 @@ function thumbnail(fuente, max = 300) {
   return c.toDataURL("image/jpeg", 0.75);
 }
 
+/** Detecta la etiqueta sobre una versión de 320 px y devuelve la caja en la foto original. */
+function detectarMarco(img) {
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const ancho = 320, factor = w / ancho;
+  const c = document.createElement("canvas");
+  c.width = ancho; c.height = Math.round(h / factor);
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  const t0 = performance.now();
+  const todas = detectarEtiquetas(ctx.getImageData(0, 0, c.width, c.height));
+  const ms = Math.round(performance.now() - t0);
+  return { ms, todas: todas.map((m) => ({ ...escalarCaja(m, factor, w, h, 0), puntaje: m.puntaje })) };
+}
+
+function recortar(img, caja, margen = 0.07) {
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const mx = (caja.x1 - caja.x0) * margen, my = (caja.y1 - caja.y0) * margen;
+  const sx = Math.max(0, caja.x0 - mx), sy = Math.max(0, caja.y0 - my);
+  const sw = Math.min(w, caja.x1 + mx) - sx, sh = Math.min(h, caja.y1 + my) - sy;
+  const c = document.createElement("canvas");
+  c.width = Math.round(sw); c.height = Math.round(sh);
+  c.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  return c;
+}
+
+/** Miniatura con las etiquetas detectadas dibujadas encima (la elegida en verde). */
+function thumbnailConMarcos(img, marcos, max = 300) {
+  const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+  const esc = Math.min(1, max / w);
+  const c = document.createElement("canvas");
+  c.width = Math.round(w * esc); c.height = Math.round(h * esc);
+  const ctx = c.getContext("2d");
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  marcos.forEach((m, i) => {
+    const pts = m.esquinas.length === 4 ? m.esquinas : [{ x: m.x0, y: m.y0 }, { x: m.x1, y: m.y0 }, { x: m.x1, y: m.y1 }, { x: m.x0, y: m.y1 }];
+    ctx.beginPath();
+    pts.forEach((p, j) => (j ? ctx.lineTo(p.x * esc, p.y * esc) : ctx.moveTo(p.x * esc, p.y * esc)));
+    ctx.closePath();
+    ctx.fillStyle = i ? "rgba(255,255,255,.15)" : "rgba(52,199,89,.25)";
+    ctx.fill();
+    ctx.lineWidth = i ? 1.5 : 3;
+    ctx.strokeStyle = i ? "rgba(255,255,255,.9)" : "#34c759";
+    ctx.stroke();
+  });
+  return c.toDataURL("image/jpeg", 0.8);
+}
+
 const casos = [];
 
 async function procesar(files) {
@@ -171,7 +220,11 @@ async function procesar(files) {
 
     try {
       const img = await cargarImagen(file);
-      const entrada = pre ? preprocesarEtiqueta(img) : img;
+      const usarMarco = $("#optMarco").checked;
+      const marco = usarMarco ? detectarMarco(img) : null;
+      const elegido = marco?.todas[0] || null;
+      const base = elegido ? recortar(img, elegido) : img;
+      const entrada = pre ? preprocesarEtiqueta(base) : base;
       const t0 = performance.now();
       const w = await getWorker(psm);
       status(`Leyendo ${file.name}…`);
@@ -188,7 +241,8 @@ async function procesar(files) {
       const chip = (ok, label) => `<span class="chip ${ok ? "ok" : "bad"}">${ok ? "✓" : "✗"} ${label}</span>`;
       div.innerHTML = `
         <div>
-          <img src="${thumbnail(img)}" alt=""><div class="imglabel">original</div>
+          <img src="${marco ? thumbnailConMarcos(img, marco.todas) : thumbnail(img)}" alt=""><div class="imglabel">${marco ? (elegido ? `original · ${marco.todas.length} etiqueta(s) detectada(s), la verde es la que se lee` : "original · no se detectó la etiqueta: se lee entera") : "original"}</div>
+          ${elegido ? `<img src="${thumbnail(base)}" alt=""><div class="imglabel">recorte que se lee</div>` : ""}
           ${pre ? `<img src="${thumbnail(entrada)}" alt=""><div class="imglabel">preprocesada</div>` : ""}
         </div>
         <div>
@@ -200,6 +254,7 @@ async function procesar(files) {
             <span class="chip meta">confianza ${conf}%</span>
             <span class="chip meta">${ms} ms</span>
             <span class="chip meta">PSM ${psm}${pre ? " · pre" : " · sin pre"}</span>
+            ${marco ? chip(!!elegido, `marco${elegido ? ` (${marco.ms} ms)` : ""}`) : ""}
             ${pistas.precioGrande !== undefined ? `<span class="chip meta">texto grande: $${pistas.precioGrande}</span>` : ""}
           </div>
           <p class="campos">

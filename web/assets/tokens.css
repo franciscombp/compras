@@ -1057,3 +1057,8 @@ html.nativo #lectorConfig { pointer-events: none; color: var(--ink-3); }
 .barrido-nativo .modo-switch { background: var(--surface-2); border-color: var(--line); backdrop-filter: none; -webkit-backdrop-filter: none; }
 .barrido-nativo .stage-chip { color: var(--ink-2); }
 .barrido-nativo .stage-chip.on { background: var(--surface); color: var(--brand-deep); box-shadow: var(--shadow-1); }
+
+/* Marco en vivo (modo Captura): el overlay no intercepta toques; con una
+   etiqueta detectada la guía fija se atenúa. */
+.marco-overlay { pointer-events: none; }
+.camera-stage.con-marco .camera-frame { opacity: .25; transition: opacity var(--dur) var(--ease); }

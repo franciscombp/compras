@@ -26,6 +26,7 @@ web/                        native/ios/App/App/              worker/
 | Interfaz | `web/assets/app.js` | Render de cada pantalla, eventos por delegación, asistente de alta, cámara |
 | Lector | `web/assets/ocr.js` | Preprocesado de imagen y parser de etiquetas |
 | Barrido | `web/assets/vivo.js` | Agrupa el texto de un fotograma en etiquetas y las sigue entre fotogramas |
+| Marco | `web/assets/marco.js` | Encuentra el rectángulo de la etiqueta en la imagen, como el escáner de documentos |
 | Datos | `web/data/store.js` | Listas, items, precios en tres estados, memoria de precios, presupuesto, ajustes, copia de seguridad |
 | Ahorro | `web/data/ahorro.js` | Estadísticas por producto, semáforo, recompra, tiendas, consejos |
 | Puente nativo | `web/data/nativo.js` | Única puerta al dispositivo; en web devuelve `null` y la app usa sus alternativas |
@@ -42,6 +43,8 @@ web/                        native/ios/App/App/              worker/
 
 En orden de preferencia:
 
-1. **App de iPhone**: Vision lee el texto y el código de barras; Apple Intelligence lo interpreta si el teléfono lo soporta. El modo *Barrido* usa una cámara SwiftUI que analiza cada fotograma.
+Antes de leer, se busca el **marco de la etiqueta** (como el escáner de documentos) y se lee solo lo de adentro, para no mezclar el precio con otros carteles del estante.
+
+1. **App de iPhone**: Vision detecta el rectángulo, lo endereza y lee el texto y el código de barras; Apple Intelligence lo interpreta si el teléfono lo soporta. El modo *Barrido* usa una cámara SwiftUI que analiza cada fotograma.
 2. **Lector con Claude**: si se configuró el Worker y hay conexión.
 3. **Tesseract** en el navegador, con el parser de `ocr.js`.

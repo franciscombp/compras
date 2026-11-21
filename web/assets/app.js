@@ -23,6 +23,7 @@ import { parseNumero, parseLectura, parseEtiqueta, extraerPistas, extraerMedidaD
 import { services, getLectorConfig, setLectorConfig, lectorDisponible } from "../data/api.js";
 import { esNativo, capacidades, leerEtiquetaNativa, interpretarEtiqueta, interpretarProducto, explicarComparacion, redactarConsejo, haptico, mantenerPantalla, exportarRecordatorios, importarRecordatorios, compartir, abrirBarridoNativo, cerrarBarridoNativo, actualizarEtiquetasNativas } from "../data/nativo.js";
 import { agruparEtiquetas, Seguimiento, mapearCaja, normalizadoDe, firmaDe } from "./vivo.js";
+import { mejorEtiqueta, escalarCaja, iouCajas } from "./marco.js";
 
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
@@ -729,9 +730,23 @@ let autoLentos = 0;
 let autoFirmaPrevia = null;
 let autoCooldownHasta = 0;
 
+/**
+ * Marco en vivo (modo Captura): como el escáner de documentos, busca la
+ * etiqueta en cada fotograma reducido (assets/marco.js), la dibuja sobre el
+ * video y, al capturar, se lee solo ese rectángulo.
+ */
+const marcoVivo = { timer: null, actual: null, estable: 0, mostrado: null };
+const MARCO_ESTABLE = 4;      // fotogramas seguidos casi iguales (~0,7 s)
+const MARCO_VIGENCIA = 700;   // ms que vale la última detección para recortar
+
 function detenerCamara() {
   clearTimeout(autoTimer);
   autoTimer = null;
+  clearTimeout(marcoVivo.timer);
+  marcoVivo.timer = null;
+  marcoVivo.actual = null;
+  marcoVivo.estable = 0;
+  marcoVivo.mostrado = null;
   clearTimeout(barrido.timer);
   barrido.timer = null;
   if (barrido.nativoActivo) cerrarBarridoNativo();
@@ -987,6 +1002,7 @@ async function iniciarEscaneo() {
     <div class="camera-stage">
       <video id="scanVideo" autoplay playsinline muted></video>
       <div class="camera-frame" aria-hidden="true"></div>
+      <canvas class="scan-overlay marco-overlay" id="marcoOverlay" aria-hidden="true"></canvas>
       <div class="stage-top">${selectorModo}<button class="auto-chip" id="autoChip" aria-pressed="false" title="Captura sola cuando la lectura es estable">Auto</button></div>
       <div class="camera-status" id="scanStatus" aria-live="polite">Pidiendo permiso de cámara…</div>
     </div>
@@ -1007,8 +1023,9 @@ async function iniciarEscaneo() {
       setScanStatus("Buscando etiquetas de precio…");
       iniciarBarrido();
     } else {
-      setScanStatus("Encuadra el precio y captura - puedes tomar varias seguidas.");
+      setScanStatus("Apunta a una etiqueta: la marco en verde y leo solo eso.");
       $("#scanCapture").disabled = false;
+      iniciarMarcoVivo();
       if (!esNativo()) getOcrWorker().catch(() => {}); // precalienta Tesseract; en nativo lee Vision
     }
   } catch (err) {
@@ -1372,18 +1389,129 @@ function openLectorSheet() {
   $("#lcCancelar", sheetContent).addEventListener("click", closeSheet);
 }
 
+// ------------------------------ Marco en vivo --------------------------------
+
+function iniciarMarcoVivo() {
+  clearTimeout(marcoVivo.timer);
+  marcoVivo.actual = null;
+  marcoVivo.estable = 0;
+  marcoVivo.timer = setTimeout(cicloMarco, 200);
+}
+
+function cicloMarco() {
+  const video = $("#scanVideo");
+  if (state.view !== "escanear" || !camaraStream || !$("#marcoOverlay")) return;
+  if (video?.videoWidth) {
+    const ancho = 320;
+    const factor = video.videoWidth / ancho;
+    const c = document.createElement("canvas");
+    c.width = ancho;
+    c.height = Math.round(video.videoHeight / factor);
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, c.width, c.height);
+    const m = mejorEtiqueta(ctx.getImageData(0, 0, c.width, c.height));
+    if (m) {
+      const caja = escalarCaja(m, factor, video.videoWidth, video.videoHeight, 0);
+      const previa = marcoVivo.actual;
+      const quieta = previa && Date.now() - previa.ts < 600 && iouCajas(previa.caja, caja) > 0.82;
+      marcoVivo.estable = quieta ? marcoVivo.estable + 1 : 1;
+      marcoVivo.actual = { caja, ts: Date.now() };
+    } else {
+      marcoVivo.estable = 0;
+      if (marcoVivo.actual && Date.now() - marcoVivo.actual.ts > MARCO_VIGENCIA) marcoVivo.actual = null;
+    }
+    dibujarMarco();
+    avisarMarco();
+    if (scanSession.auto && marcoVivo.estable >= MARCO_ESTABLE && !autoOcupado && Date.now() >= autoCooldownHasta) {
+      programarCicloAuto(0);
+    }
+  }
+  marcoVivo.timer = setTimeout(cicloMarco, 180);
+}
+
+function avisarMarco() {
+  const estado = !marcoVivo.actual ? "buscando" : marcoVivo.estable >= MARCO_ESTABLE ? "listo" : "viendo";
+  if (estado === marcoVivo.mostrado || autoOcupado) return;
+  marcoVivo.mostrado = estado;
+  $(".camera-stage")?.classList.toggle("con-marco", estado !== "buscando");
+  setScanStatus(estado === "buscando"
+    ? "Buscando la etiqueta… acércate hasta que se vea entera."
+    : estado === "viendo" ? "Etiqueta a la vista… mantén quieto."
+      : scanSession.auto ? "Etiqueta lista ✓ leyendo…" : "Etiqueta lista ✓ toca Capturar.");
+}
+
+function dibujarMarco() {
+  const canvas = $("#marcoOverlay"), video = $("#scanVideo");
+  if (!canvas || !video?.videoWidth) return;
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) {
+    canvas.width = Math.round(cw * dpr);
+    canvas.height = Math.round(ch * dpr);
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+  const actual = marcoVivo.actual;
+  if (!actual) return;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const escala = Math.max(cw / vw, ch / vh);
+  const offX = (cw - vw * escala) / 2, offY = (ch - vh * escala) / 2;
+  const pts = (actual.caja.esquinas?.length === 4 ? actual.caja.esquinas : [
+    { x: actual.caja.x0, y: actual.caja.y0 }, { x: actual.caja.x1, y: actual.caja.y0 },
+    { x: actual.caja.x1, y: actual.caja.y1 }, { x: actual.caja.x0, y: actual.caja.y1 },
+  ]).map((p) => ({ x: offX + p.x * escala, y: offY + p.y * escala }));
+  const listo = marcoVivo.estable >= MARCO_ESTABLE;
+  ctx.beginPath();
+  pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+  ctx.closePath();
+  ctx.fillStyle = listo ? "rgba(52, 199, 89, 0.22)" : "rgba(255, 255, 255, 0.12)";
+  ctx.fill();
+  ctx.lineWidth = listo ? 3 : 2;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = listo ? "#34c759" : "rgba(255, 255, 255, 0.9)";
+  ctx.setLineDash(listo ? [] : [7, 6]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/**
+ * Recorte a resolución completa de la etiqueta detectada (con un poco de
+ * margen), o null si no hay una detección reciente.
+ */
+function recorteDeMarco() {
+  const video = $("#scanVideo");
+  const actual = marcoVivo.actual;
+  if (!video?.videoWidth || !actual || Date.now() - actual.ts > MARCO_VIGENCIA) return null;
+  const { x0, y0, x1, y1 } = actual.caja;
+  const mx = (x1 - x0) * 0.06, my = (y1 - y0) * 0.08;
+  const sx = Math.max(0, x0 - mx), sy = Math.max(0, y0 - my);
+  const sw = Math.min(video.videoWidth, x1 + mx) - sx, sh = Math.min(video.videoHeight, y1 + my) - sy;
+  if (sw < 40 || sh < 30) return null;
+  const escala = Math.min(1, 1400 / sw);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(sw * escala);
+  canvas.height = Math.round(sh * escala);
+  canvas.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 /** Captura manual: la cámara sigue encendida para encadenar la siguiente. */
 async function capturarEtiqueta() {
   const btn = $("#scanCapture");
-  const canvas = capturarFrame();
+  const recorte = recorteDeMarco();
+  const canvas = recorte || capturarFrame();
   if (!canvas) return;
   flashCamara();
   if (btn) btn.disabled = true;
-  setScanStatus(esNativo() ? "Leyendo etiqueta con Vision…" : lectorDisponible() ? "Leyendo etiqueta con IA…" : "Leyendo etiqueta…");
+  const solo = recorte ? " (solo la etiqueta)" : "";
+  setScanStatus((esNativo() ? "Leyendo etiqueta con Vision…" : lectorDisponible() ? "Leyendo etiqueta con IA…" : "Leyendo etiqueta…") + solo);
   try {
     const { datos, fuente } = await leerDatosEtiqueta(canvas);
     if (datos.precio === null && datos.contenido === null) {
-      setScanStatus("No se leyó un precio - acércate a la etiqueta y captura otra vez.");
+      setScanStatus(recorte
+        ? "Vi la etiqueta pero no leí el precio: acércate un poco más."
+        : "No encontré la etiqueta: acércate hasta que se marque en verde.");
       return;
     }
     const cap = agregarCaptura(datos, canvas);
@@ -1428,7 +1556,7 @@ function setAuto(on) {
   autoFirmaPrevia = null;
   autoLentos = 0;
   if (on) {
-    setScanStatus("Auto activado: mantén la etiqueta quieta dentro del marco.");
+    setScanStatus("Auto activado: cuando la etiqueta se marque en verde, la leo sola.");
     programarCicloAuto(600);
   }
 }
@@ -1444,7 +1572,10 @@ async function cicloAuto() {
   if (autoOcupado || Date.now() < autoCooldownHasta) { programarCicloAuto(); return; }
   autoOcupado = true;
   try {
-    const canvas = capturarFrame();
+    // Con marco estable se lee solo la etiqueta y una lectura basta; sin
+    // marco se lee la zona guía y se piden dos lecturas iguales.
+    const recorte = marcoVivo.estable >= MARCO_ESTABLE ? recorteDeMarco() : null;
+    const canvas = recorte || capturarFrame();
     if (!canvas) return;
     const t0 = performance.now();
     const nativo = esNativo();
@@ -1474,7 +1605,7 @@ async function cicloAuto() {
     const yaCapturada = scanSession.capturas.some(
       (c) => c.precio === datos.precio && (c.contenido ?? null) === (datos.contenido ?? null)
     );
-    if (firma === autoFirmaPrevia && !yaCapturada) {
+    if ((recorte || firma === autoFirmaPrevia) && !yaCapturada) {
       flashCamara();
       // El OCR local detecta que la etiqueta está quieta; la lectura buena la
       // hace el lector IA cuando existe (una llamada por captura, no por ciclo).
@@ -1489,6 +1620,7 @@ async function cicloAuto() {
       setScanStatus(`Auto: capturada ${fmt(cap.precio)} ✓ - apunta a la siguiente etiqueta.`);
       autoCooldownHasta = Date.now() + 3000;
       autoFirmaPrevia = null;
+      marcoVivo.estable = 0;
     } else {
       autoFirmaPrevia = firma;
     }

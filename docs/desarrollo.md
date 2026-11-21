@@ -44,9 +44,10 @@ npm test
 
 - `tests/parser-test.mjs`: lectura de etiquetas (precios, packs, promos, unidades).
 - `tests/vivo-test.mjs`: agrupación de etiquetas y seguimiento entre fotogramas del barrido.
+- `tests/marco-test.mjs`: detector del marco de la etiqueta con estantes sintéticos (girada, amarilla, varias, reflejos, luz desigual, velocidad).
 - `tests/ahorro-test.mjs`: memoria de precios, semáforo, recompra, tiendas, consejos y copia de seguridad, con tres meses de compras simuladas en cuatro tiendas. Si le pasas una ruta (`node tests/ahorro-test.mjs semilla.json`), guarda el `localStorage` resultante para cargarlo en el navegador.
 
-Para probar el lector con fotos reales, abre `/lab/etiquetas.html` con el servidor local.
+Para probar el lector con fotos o capturas reales, abre `/lab/etiquetas.html` con el servidor local (o en https://franciscombp.github.io/compras/lab/etiquetas.html). Muestra qué etiqueta detecta (en verde), el recorte que lee y lo que extrae.
 
 ## Antes de subir cambios a la web
 

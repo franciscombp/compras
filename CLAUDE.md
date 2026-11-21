@@ -34,7 +34,7 @@ npm run ios   # copies web/ into native/dist, syncs Capacitor, opens Xcode
 
 - **Clear Service Worker cache**: Change `CACHE_VERSION` in `web/assets/sw.js` to force a fresh cache
 - **Validate JavaScript syntax**: `node -c web/assets/app.js`
-- **Run the logic tests**: `npm test` (parser, live sweep, savings engine in `tests/`)
+- **Run the logic tests**: `npm test` (parser, live sweep, label frame detector, savings engine in `tests/`)
 - **Check for smart quotes**: `grep -P '[""''«»‹›„‚]' web/assets/app.js` (causes syntax errors)
 - **Commit and deploy**: merge to `main` → `.github/workflows/static.yml` publishes only `web/` to GitHub Pages (Pages source must be "GitHub Actions"). See `docs/despliegue.md`
 
@@ -59,6 +59,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   │   ├── app.js          # UI logic, event delegation, render functions; also holds the small helpers ($, $$, fmt, esc, toast, icon)
 │   │   ├── ocr.js          # Shared OCR module: image preprocessing + label parser
 │   │   ├── vivo.js         # Live sweep logic: cluster OCR lines into price tags, track them across frames (pure, tested)
+│   │   ├── marco.js        # Label frame detector, document-scanner style: Otsu + filled connected components → bright rectangle with text (pure, tested)
 │   │   ├── tokens.css      # Design system (colors, typography, layout)
 │   │   └── sw.js           # Service Worker (network-first caching)
 │   ├── data/
@@ -71,6 +72,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 ├── tests/                  # Node tests of the pure logic, run with `npm test`
 │   ├── parser-test.mjs     # Label parser
 │   ├── vivo-test.mjs       # Live sweep clustering + tracking
+│   ├── marco-test.mjs      # Label frame detector on synthetic shelves (rotated, yellow, distractors, uneven light, speed)
 │   └── ahorro-test.mjs     # Savings engine; `node tests/ahorro-test.mjs seed.json` dumps localStorage as a seed for browser tests
 ├── scripts/
 │   ├── fetch-catalogo.mjs  # Catalog fetcher (weekly GitHub Action, or `npm run catalogo`) -> web/data/catalogo.json
@@ -81,7 +83,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   └── wrangler.toml       # ORIGENES_PERMITIDOS, MODELO; secrets: ANTHROPIC_API_KEY, LECTOR_TOKEN
 ├── native/                 # iOS app: Capacitor + Vision + Apple Intelligence (see native/README.md)
 │   ├── scripts/build-web.mjs       # copies web/ to native/dist (no Service Worker)
-│   └── ios/App/App/*.swift         # QuantoNativoPlugin (bridge), LectorEtiqueta (Vision OCR + barcode), AppleIA (Foundation Models), Recordatorios (EventKit), BarridoView/BarridoModelo/EtiquetasVivo (SwiftUI camera sweep)
+│   └── ios/App/App/*.swift         # QuantoNativoPlugin (bridge), LectorEtiqueta (Vision OCR + barcode, reads only inside the label frame), MarcoEtiqueta (VNDetectRectanglesRequest + perspective correction), AppleIA (Foundation Models), Recordatorios (EventKit), BarridoView/BarridoModelo/EtiquetasVivo (SwiftUI camera sweep)
 ├── docs/                   # Spanish docs: arquitectura, desarrollo, despliegue, api-contract
 └── .github/
     ├── workflows/static.yml              # Publishes web/ to Pages on push to main, manual, and after the catalog bot
@@ -167,7 +169,11 @@ Event delegation handles:
 
 Two modes on the camera screen, chosen with the chips on the stage and remembered in localStorage (`quanto.scan_modo`):
 
-- **Barrido nativo** (iOS app, default when `capacidades().barridoNativo`): `renderBarridoNativo()` shows a card and opens the SwiftUI camera (`abrirBarridoNativo`). Vision, clustering and tracking run in Swift (`EtiquetasVivo.swift`, a port of `vivo.js`); each confirmed label arrives as a `barridoEtiqueta` event and `incorporarEtiquetaNativa()` parses it with `parseEtiqueta`, dedupes by `firmaDe`, adds it to `scanSession.capturas`, refines with Apple Intelligence and sends chips back to the overlay (`enviarChipsNativos` → `actualizarEtiquetasNativas`). `barridoToque` on a confirmed label closes the camera and opens `openCapturaSheet`.
+- **Label frame (document-scanner style)**: the goal is to read only the price tag, never the rest of the shelf.
+  - Web / Captura mode: `cicloMarco()` runs `mejorEtiqueta()` from `marco.js` on a 320 px copy of each frame every ~180 ms, `dibujarMarco()` draws the quad on `#marcoOverlay` (white dashed while acquiring, green when stable for `MARCO_ESTABLE` frames). `capturarEtiqueta()` and `cicloAuto()` read `recorteDeMarco()` (full-res crop of the tag) and fall back to the guide crop `capturarFrame()` when no tag is detected. With Auto on, a stable frame triggers the read and one reading is enough.
+  - iOS: `LectorEtiqueta.leer(marco: true)` detects rectangles with Vision (`MarcoEtiqueta.peticion()`), picks the biggest centered one, straightens it (`CIPerspectiveCorrection`) and OCRs only that; if the frame has no digits it reads the whole image. In the native sweep, `EtiquetasVivo.porMarcos()` keeps only text whose center lies inside a detected rectangle (text outside is ignored); confirmed tags are straightened and re-read with `.accurate` before going to the web. The **Marco / Libre** button switches to the old proximity clustering for tags without a visible border.
+  - `web/lab/etiquetas.html` shows the detected frame(s), the crop and what is read, for debugging real photos.
+- **Barrido nativo** (iOS app, default when `capacidades().barridoNativo`): `renderBarridoNativo()` shows a card and opens the SwiftUI camera (`abrirBarridoNativo`). Vision, rectangles, clustering and tracking run in Swift (`EtiquetasVivo.swift`, a port of `vivo.js`, plus `MarcoEtiqueta.swift`); each confirmed label arrives as a `barridoEtiqueta` event and `incorporarEtiquetaNativa()` parses it with `parseEtiqueta`, dedupes by `firmaDe`, adds it to `scanSession.capturas`, refines with Apple Intelligence and sends chips back to the overlay (`enviarChipsNativos` → `actualizarEtiquetasNativas`). `barridoToque` on a confirmed label closes the camera and opens `openCapturaSheet`.
 - **Barrido** (WebView fallback when the plugin has no native camera): `cicloBarrido()` sends full frames to Vision every ~100 ms with `ia: false`; `agruparEtiquetas()` in `vivo.js` clusters the OCR lines into price tags and parses each; `Seguimiento` tracks them across frames and confirms a tag on its 2nd sighting; confirmed tags enter `scanSession.capturas` once (`incorporarPista`) with a cropped thumbnail, then `refinarConIA()` asks Apple Intelligence to reread that tag's text (name, content, pack; never the price; skipped if the user edited the capture). `dibujarOverlay()` draws boxes and price-per-100 chips on `#scanOverlay`, best in green; tapping a box confirms it immediately or opens `openCapturaSheet`. Pause chip stops the loop; the tray and verdict below are the same as in capture mode.
 - **Captura** (manual button, plus optional Auto):
 
