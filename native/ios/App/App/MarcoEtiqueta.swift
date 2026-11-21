@@ -76,6 +76,24 @@ enum MarcoEtiqueta {
         return f.outputImage
     }
 
+    /// ¿El rectángulo `b` está dentro de `a`? (cajas en coordenadas normalizadas)
+    static func dentro(_ b: [CGPoint], de a: [CGPoint], holgura: CGFloat = 0.01) -> Bool {
+        let ca = caja(a), cb = caja(b)
+        return cb.minX >= ca.minX - holgura && cb.minY >= ca.minY - holgura &&
+               cb.maxX <= ca.maxX + holgura && cb.maxY <= ca.maxY + holgura && area(b) < area(a)
+    }
+
+    /// La etiqueta en una foto: entre los rectángulos que contienen un número
+    /// con pinta de precio, el más interno (la etiqueta pegada sobre un cartel
+    /// de promoción gana al cartel). Sin pistas de texto, el más grande y centrado.
+    static func etiqueta(_ obs: [VNRectangleObservation], centrosConPrecio: [CGPoint], areaMin: CGFloat = 0.02) -> VNRectangleObservation? {
+        let conPrecio = obs.filter { o in
+            area(esquinas(o)) >= areaMin && centrosConPrecio.contains { contiene(esquinas(o), $0) }
+        }
+        if let interno = conPrecio.min(by: { area(esquinas($0)) < area(esquinas($1)) }) { return interno }
+        return principal(obs)
+    }
+
     /// Elige la etiqueta principal de una foto: la más grande y centrada.
     static func principal(_ obs: [VNRectangleObservation], areaMin: CGFloat = 0.04) -> VNRectangleObservation? {
         obs.map { o -> (VNRectangleObservation, CGFloat) in

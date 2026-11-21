@@ -47,6 +47,7 @@ enum AppleIA {
 
             Recibes el texto OCR de una etiqueta de góndola o empaque, con posibles errores de lectura.
             - precio: el precio vigente que paga el cliente. Con "antes/ahora" o un precio tachado, usa el vigente. Promo "2 x $5.00": precio 5.00 y unidades 2. Centavos elevados ("1 99") significan 1.99.
+            - Etiquetas de Supermaxi: el precio grande junto a "AFILIADO" es el precio; el de "NO AFILIADO" (chico, debajo) no lo uses. Si solo se lee "NO AFILIADO", usa ese. "US.$" es el símbolo de dólar. El nombre son las líneas en mayúsculas antes de "EXENTO DE IVA" (abreviado, por ejemplo "ALIM HUM PERRO CAR/VEG PU 85G" es alimento húmedo para perro carne y vegetales).
             - Ignora precios de referencia por kg, por 100 g o c/u salvo que sean lo único que hay.
             - contenido: contenido neto de UN envase en g o ml (kg a g, l a ml, lb a 453.6 g, oz a 28.35 g). Peso neto antes que escurrido. Pack "6 x 80 g": contenido 80, unidades 6.
             - Productos por piezas (huevos, pañales, rollos): unidad "unidad" y contenido = piezas.

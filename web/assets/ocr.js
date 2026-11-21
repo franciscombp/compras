@@ -20,7 +20,7 @@ export const UNIDADES_MEDIDA = {
 };
 export const RE_UNIDAD = "kgs?|kilos?|grs?|gramos?|mg|lbs?|libras?|oz|ml|cc|cl|lts?|litros?|g|l";
 
-const MAPA_DIGITOS = { O: "0", o: "0", Q: "0", D: "0", I: "1", l: "1", "|": "1", i: "1", Z: "2", z: "2", S: "5", s: "5", B: "8", G: "6" };
+const MAPA_DIGITOS = { O: "0", o: "0", Q: "0", D: "0", U: "0", u: "0", I: "1", l: "1", "|": "1", i: "1", Z: "2", z: "2", S: "5", s: "5", B: "8", G: "6" };
 
 /**
  * El OCR confunde letras con dígitos dentro de los precios ($O.99, 1.5O).
@@ -28,10 +28,10 @@ const MAPA_DIGITOS = { O: "0", o: "0", Q: "0", D: "0", I: "1", l: "1", "|": "1",
  * un separador decimal) para no tocar palabras reales.
  */
 function corregirDigitos(t) {
-  return t.replace(/[$]?\s?[0-9OoQDIl|iZzSsBG]{1,4}[.,][0-9OoQDIl|iZzSsBG]{2}(?![\d.,])/g, (tok) => {
-    if (!/\d/.test(tok)) return tok;             // sin ningún dígito real: es palabra
-    if (!/[OoQDIl|iZzSsBG]/.test(tok)) return tok; // ya está limpio
-    return tok.replace(/[OoQDIl|iZzSsBG]/g, (c) => MAPA_DIGITOS[c]);
+  return t.replace(/[$]?\s?[0-9OoQDUuIl|iZzSsBG]{1,4}[.,][0-9OoQDUuIl|iZzSsBG]{2}(?![\d.,])/g, (tok) => {
+    if (!/\d/.test(tok)) return tok;               // sin ningún dígito real: es palabra
+    if (!/[OoQDUuIl|iZzSsBG]/.test(tok)) return tok; // ya está limpio
+    return tok.replace(/[OoQDUuIl|iZzSsBG]/g, (c) => MAPA_DIGITOS[c]);
   });
 }
 
@@ -41,8 +41,86 @@ function corregirDigitos(t) {
  * ($ o palabra clave) para no romper medidas como "6 x 80".
  */
 function unirCentavosSueltos(t) {
-  return t.replace(/(\$\s*|(?:pvp|precio|ahora|oferta|lleva)\s*[:.]?\s*)(\d{1,3})\s+(\d{2})(?!\d)/gi,
-    (_, pre, ent, cent) => `${pre}${ent}.${cent}`);
+  return t
+    .replace(/(\$\s*|(?:pvp|precio|ahora|oferta|lleva|afiliado)\s*[:.]?\s*)(\d{1,3})\s+(\d{2})(?!\d)/gi,
+      (_, pre, ent, cent) => `${pre}${ent}.${cent}`)
+    // "0. 79" / "0 .79": el punto quedó pegado a un lado y los centavos al otro
+    .replace(/(^|[^\d.,])(\d{1,3})\s*[.,]\s+(\d{2})(?![\d.,])/g, (_, a, ent, cent) => `${a}${ent}.${cent}`)
+    .replace(/(^|[^\d.,])(\d{1,3})\s+[.,]\s*(\d{2})(?![\d.,])/g, (_, a, ent, cent) => `${a}${ent}.${cent}`);
+}
+
+/**
+ * Una línea que es solo "1 39" (entero grande y centavos elevados) es un
+ * precio: en las etiquetas de góndola nada más se imprime así.
+ */
+function unirPrecioDeLinea(lineas) {
+  return lineas.map((l) => l.replace(/^\s*\$?\s*(\d{1,3})\s+(\d{2})\s*$/, "$1.$2"));
+}
+
+/**
+ * Supermaxi y otras cadenas escriben "US.$" antes del precio. El OCR suele
+ * leer ese "$" como 5, 8 o S ("US.80.95", "US 51.93") o perderlo y también
+ * el punto decimal ("US 149"). Se normaliza a "US.$ 0.95" / "US.$ 1.49".
+ */
+function normalizarMoneda(t) {
+  return t
+    .replace(/\bU\.?\s?S\b\.?\s*(?:\$|[58S](?=\d[.,]\d{2}(?!\d)))?\s*(?=\d)/g, "US.$ ")
+    .replace(/\bU\.?\s?S\b\.?\s*\$(?!\s*\d)/g, "US.$ ")
+    .replace(/US\.\$\s*(\d)(\d{2})(?![\d.,])/g, "US.$ $1.$2");
+}
+
+/** EAN-13 a partir de los 12 dígitos impresos (les falta el de control). */
+export function completarEAN(digitos) {
+  const d = String(digitos || "").replace(/\D/g, "");
+  if (d.length === 13) return d;
+  if (d.length !== 12) return null;
+  let suma = 0;
+  for (let i = 0; i < 12; i++) suma += Number(d[i]) * (i % 2 ? 3 : 1);
+  return d + ((10 - (suma % 10)) % 10);
+}
+
+// Marcas del formato de etiqueta de Supermaxi (y parecidos)
+const RE_FORMATO_GONDOLA = /afiliad|exento\s*de\s*iva|de\s+iva\b|grava\s*iva|us\.?\s?\$/i;
+const RE_LINEA_PARADA = /exento|\bde\s*iva\b|grava|afiliad|us\.?\s?\$|\d{7,}|participante/i;
+
+/**
+ * Nombre en las etiquetas de góndola tipo Supermaxi: las 1-2 líneas que hay
+ * justo antes de "EXENTO DE IVA" (si no se leyó, las primeras del texto),
+ * limpiando la basura que deja el OCR. Así no se cuela el texto de la lata o
+ * del cartel que quedó en la foto.
+ */
+function nombreDeGondola(lineas) {
+  const limpiar = (l) => l
+    .replace(/[“”"'|\[\]{}_—–·•*]+/g, " ")
+    .split(/\s+/)
+    .filter((tok) => /[A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}/.test(tok) || /^\d+(?:[.,]\d+)?(?:g|gr|grs|kg|ml|l|lt|lts|cc|lb|oz)$/i.test(tok))
+    .join(" ")
+    .trim();
+  const esNombre = (l) => l && !RE_LINEA_PARADA.test(l) && (l.match(/[A-Za-zÁÉÍÓÚÑáéíóúñ]/g) || []).length >= 3;
+  const mayusCorta = (l) => l === l.toUpperCase() && l.length <= 24;
+
+  const parada = lineas.findIndex((l) => /exento|\bde\s*iva\b|grava/i.test(l));
+  if (parada > 0) {
+    const previas = [];
+    for (let i = parada - 1; i >= 0 && previas.length < 2; i--) {
+      const l = limpiar(lineas[i]);
+      if (!l) continue;
+      if (!esNombre(l)) break;
+      if (previas.length && !mayusCorta(l)) break;   // la 2.ª línea solo si parece parte del nombre
+      previas.unshift(l);
+    }
+    if (previas.length) return previas.join(" ");
+  }
+  const nombre = [];
+  for (const crudo of lineas) {
+    const l = limpiar(crudo);
+    if (!l) continue;
+    if (!esNombre(l)) { if (nombre.length) break; continue; }
+    if (nombre.length && !mayusCorta(l)) break;
+    nombre.push(l);
+    if (nombre.length === 2) break;
+  }
+  return nombre.join(" ");
 }
 
 /**
@@ -59,7 +137,9 @@ function unirCentavosSueltos(t) {
  *    no trae gramaje, el contenido se deduce de ahí
  */
 export function parseEtiqueta(texto, pistas = {}) {
-  let t = texto.replace(/\s+/g, " ");
+  const lineas = unirPrecioDeLinea(String(texto || "").split("\n"));
+  let t = lineas.join("\n").replace(/\s+/g, " ");
+  t = normalizarMoneda(t);
   t = corregirDigitos(t);
   t = unirCentavosSueltos(t);
 
@@ -100,12 +180,24 @@ export function parseEtiqueta(texto, pistas = {}) {
     if (/pvp|precio|ahora|oferta|lleva|paga/.test(antesDe)) peso += 3; // palabra clave
     if (/antes|normal|regular|tachado/.test(antesDe)) peso -= 4;      // precio viejo
     if (/\/|por\s*$/.test(antesDe)) peso -= 2;                        // es unitario, no total
+    // Supermaxi: el precio grande es el de afiliado (con tarjeta); el de
+    // "NO AFILIADO" va chico debajo. Se guarda aparte.
+    const noAfiliado = /no\s*afiliad/.test(antesDe);
+    if (noAfiliado) peso -= 2;
+    else if (/afiliad/.test(antesDe)) peso += 3;
     const valor = parseNumero(m[2]);
     // En góndola el precio es el texto más grande: si coincide con la
     // palabra más alta que vio el OCR, es casi seguro el bueno.
     if (pistas.precioGrande !== undefined && Math.abs(valor - pistas.precioGrande) < 0.005) peso += 5;
-    candidatos.push({ valor, peso, index: m.index });
+    candidatos.push({ valor, peso, index: m.index, noAfiliado });
   }
+  // El número más grande de la foto con centavos (armado con los centavos
+  // elevados) es el precio aunque el texto lo haya partido.
+  if (pistas.precioGrande !== undefined && !Number.isInteger(pistas.precioGrande) &&
+      !candidatos.some((c) => Math.abs(c.valor - pistas.precioGrande) < 0.005)) {
+    candidatos.push({ valor: pistas.precioGrande, peso: 5, index: -1, noAfiliado: false });
+  }
+  const precioNoAfiliado = candidatos.find((c) => c.noAfiliado)?.valor ?? null;
   // Entero con símbolo ("$3") como último recurso
   const entero = t.match(/\$\s*(\d{1,4})(?![\d.,])/);
   if (entero && !candidatos.length) candidatos.push({ valor: Number(entero[1]), peso: 0, index: entero.index });
@@ -157,9 +249,17 @@ export function parseEtiqueta(texto, pistas = {}) {
     unidad = unitarioImpreso.base;
   }
 
-  // --- Nombre: la línea "más de producto" del texto ------------------------
-  const RUIDO = /pvp|precio|oferta|ahora|antes|lleva|gratis|paga|ahorr|promo|desc|unid|total|caja|cod|sku|cont\.?\s|neto|escurr/i;
-  const nombre = texto.split("\n")
+  // --- Código impreso en la etiqueta (EAN sin dígito de control) ------------
+  const codImpreso = texto.match(/(?<!\d)(\d{12,13})(?!\d)/);
+  const codigo = codImpreso ? completarEAN(codImpreso[1]) : null;
+
+  // --- Nombre ----------------------------------------------------------------
+  const formatoGondola = RE_FORMATO_GONDOLA.test(texto) || /US\.\$/.test(t);
+  const nombreGondola = formatoGondola ? nombreDeGondola(lineas) : "";
+
+  // Si no, la línea "más de producto" del texto
+  const RUIDO = /pvp|precio|oferta|ahora|antes|lleva|gratis|paga|ahorr|promo|desc|unid|total|caja|cod|sku|cont\.?\s|neto|escurr|afiliad|exento|\biva\b|participante/i;
+  const nombre = nombreGondola || texto.split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length >= 4 && /[a-záéíóúñ]{4,}/i.test(l) && !RUIDO.test(l))
     .sort((a, b) => {
@@ -168,7 +268,10 @@ export function parseEtiqueta(texto, pistas = {}) {
       return da - db || b.length - a.length;
     })[0] || "";
 
-  return { precio, contenido, unidad, unidades, nombre };
+  const salida = { precio, contenido, unidad, unidades, nombre };
+  if (precioNoAfiliado !== null && precioNoAfiliado !== precio) salida.precioNoAfiliado = precioNoAfiliado;
+  if (codigo) salida.codigo = codigo;
+  return salida;
 }
 
 /**
@@ -189,13 +292,22 @@ export function extraerPistas(data) {
   }
   if (!words.length) return {};
 
+  const altoDe = (w) => (w.bbox.y1 ?? 0) - (w.bbox.y0 ?? 0);
   let mejor = null;
   for (const w of words) {
-    const m = w.text.match(/^\$?(\d{1,4}(?:[.,]\d{1,2})?)\$?$/);
+    const m = w.text.match(/^\$?(\d{1,4}(?:[.,]\d{1,2})?)[.,]?\$?$/);
     if (!m) continue;
-    const valor = parseNumero(m[1]);
+    let valor = parseNumero(m[1]);
+    const alto = altoDe(w);
+    // Centavos elevados: el precio grande ("0." o "1") y, a su derecha y
+    // arriba, dos dígitos más chicos ("79").
+    if (!/[.,]\d/.test(w.text) && valor < 1000) {
+      const cent = words.find((c) => c !== w && /^[0-9OoUu]{2}$/.test(c.text) &&
+        c.bbox.x0 >= w.bbox.x1 - alto * 0.2 && c.bbox.x0 - w.bbox.x1 < alto * 0.9 &&
+        altoDe(c) < alto * 0.85 && altoDe(c) > alto * 0.25 && c.bbox.y0 < w.bbox.y0 + alto * 0.35);
+      if (cent) valor = Math.round((Math.floor(valor) + Number(cent.text.replace(/[OoUu]/g, "0")) / 100) * 100) / 100;
+    }
     if (valor <= 0 || valor > 5000) continue;
-    const alto = (w.bbox.y1 ?? 0) - (w.bbox.y0 ?? 0);
     if (alto > 0 && (!mejor || alto > mejor.alto)) mejor = { valor, alto };
   }
   if (!mejor) return {};

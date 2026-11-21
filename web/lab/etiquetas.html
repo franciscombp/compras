@@ -261,7 +261,9 @@ async function procesar(files) {
             <b>Precio</b> ${r.precio !== null ? "$" + r.precio.toFixed(2) : "—"}<br>
             <b>Contenido</b> ${r.contenido !== null ? r.contenido + " " + r.unidad : "—"}<br>
             <b>Envases</b> ${r.unidades}<br>
-            <b>Nombre</b> ${r.nombre || "—"}
+            <b>Nombre</b> ${r.nombre || "—"}<br>
+            <b>Sin afiliación</b> ${r.precioNoAfiliado ? "$" + r.precioNoAfiliado.toFixed(2) : "—"}<br>
+            <b>Código</b> ${r.codigo || "—"}
           </p>
           <details><summary>Texto OCR crudo</summary><pre>${texto.replace(/</g, "&lt;") || "(vacío)"}</pre></details>
         </div>`;

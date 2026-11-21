@@ -819,15 +819,19 @@ async function leerDatosEtiqueta(canvas, { rapido = false } = {}) {
         const ia = r.ia;
         const conContenido = ia.contenido && ia.unidad;
         fuente = "apple";
+        // Si la IA tomó el precio "NO AFILIADO" y el parser vio el grande, vale el grande.
+        const tomoNoAfiliado = base.precioNoAfiliado && base.precio && Math.abs(ia.precio - base.precioNoAfiliado) < 0.005;
         datos = {
-          precio: ia.precio,
+          ...base,
+          precio: tomoNoAfiliado ? base.precio : ia.precio,
           contenido: conContenido ? ia.contenido : base.contenido,
           unidad: conContenido ? ia.unidad : base.unidad,
           unidades: ia.unidades || base.unidades || 1,
           nombre: ia.nombre || base.nombre,
         };
       }
-      if (r.codigo && !rapido) datos = await completarPorCodigo(datos, r.codigo);
+      const codigo = r.codigo || base.codigo;
+      if (codigo && !rapido) datos = await completarPorCodigo(datos, codigo);
       return { datos, fuente };
     } catch (e) {
       if (Date.now() - avisoLectorIA > 60000) {
@@ -849,7 +853,9 @@ async function leerDatosEtiqueta(canvas, { rapido = false } = {}) {
     }
   }
   const lectura = await leerEtiqueta(canvas);
-  return { datos: parseLectura(lectura.data), fuente: "ocr", confianzaOcr: lectura.confianza };
+  let datos = parseLectura(lectura.data);
+  if (datos.codigo && !rapido) datos = await completarPorCodigo(datos, datos.codigo);
+  return { datos, fuente: "ocr", confianzaOcr: lectura.confianza };
 }
 
 const porCodigo = new Map();
@@ -1402,7 +1408,7 @@ function cicloMarco() {
   const video = $("#scanVideo");
   if (state.view !== "escanear" || !camaraStream || !$("#marcoOverlay")) return;
   if (video?.videoWidth) {
-    const ancho = 320;
+    const ancho = 256;
     const factor = video.videoWidth / ancho;
     const c = document.createElement("canvas");
     c.width = ancho;
@@ -1533,6 +1539,7 @@ function agregarCaptura(datos, canvas) {
     contenido: datos.contenido,
     unidad: datos.unidad || "g",
     unidades: datos.unidades || 1,
+    precioNoAfiliado: datos.precioNoAfiliado ?? null,
     thumb: typeof canvas === "string" ? canvas : miniatura(canvas),
     agregadaComo: null, // id del ItemLista si ya se agregó / marcó
   };
@@ -1704,6 +1711,7 @@ function renderScanTray() {
         <div class="sc-precio tabular">${fmt(c.precio)}</div>
         <div class="sc-meta tabular">${total ? `${total} ${unidadCorta}${norm ? ` · ${fmt(norm)}/${c.unidad === "unidad" ? "unid." : `100 ${c.unidad}`}` : ""}` : "Sin gramaje - toca para completar"}</div>
         ${c.nombre ? `<div class="sc-meta" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${c.fuente === "apple" ? "✦ " : ""}${esc(c.nombre)}</div>` : ""}
+        ${c.precioNoAfiliado && c.precioNoAfiliado !== c.precio ? `<div class="sc-meta">Sin afiliación ${fmt(c.precioNoAfiliado)}</div>` : ""}
         ${c.nombre && c.precio > 0 ? `<div style="margin-top:4px">${semChip({ nombre: c.nombre, precio: c.precio, contenido: c.contenido, unidad: c.unidad, unidades: c.unidades })}</div>` : ""}
         ${c.agregadaComo
           ? `<span class="chip chip-menos" style="margin-top:6px">✓ En tu carrito</span>`

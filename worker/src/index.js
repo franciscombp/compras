@@ -30,6 +30,7 @@ Recibes la foto de una etiqueta de góndola o de un empaque. Extrae solo lo que 
 
 Reglas:
 - precio: el precio vigente que paga el cliente. Si hay "antes/ahora" o un precio tachado, usa el vigente. Si la promo es "2 x $5.00", precio = 5.00 y unidades = 2. Los centavos a veces van pequeños y elevados ("1 99" es 1.99).
+- Etiquetas de Supermaxi: el precio grande junto a "AFILIADO" es el precio; el de "NO AFILIADO" (chico, debajo) no lo uses salvo que sea el único legible. "US.$" es el símbolo de dólar. El nombre son las líneas en mayúsculas antes de "EXENTO DE IVA".
 - Ignora precios de referencia impresos "por kg", "por 100 g" o "c/u", salvo que sean lo único que hay: entonces deduce precio y contenido del envase a partir de ellos solo si es inequívoco.
 - contenido: el contenido neto de un envase convertido a g o ml (kg -> g, l -> ml, cl -> ml, lb -> 453.6 g, oz -> 28.35 g). Prefiere el peso neto sobre el escurrido o drenado. Para packs ("6 x 80 g") contenido = 80 y unidades = 6.
 - Productos que se venden por piezas sin peso (huevos, pañales, rollos): unidad = "unidad" y contenido = número de piezas.

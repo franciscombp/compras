@@ -65,13 +65,67 @@ casos.push({
   espera: { precio: 2.35, contenido: 175, unidad: "g" },
 });
 
+// ---- Etiquetas de góndola de Supermaxi (fotos reales) ----------------------
+// Formato: nombre abreviado en 1-2 líneas, "EXENTO DE IVA", código impreso,
+// precio de afiliado grande con centavos elevados ("0.⁷⁹") y debajo el precio
+// "NO AFILIADO". Se prueban como las leería Vision (limpio) y como las leyó
+// Tesseract sobre las fotos (con errores típicos).
+const palabra = (text, x0, y0, x1, y1) => ({ text, bbox: { x0, y0, x1, y1 } });
+const comunes = [palabra("ALIM", 40, 40, 120, 80), palabra("HUM", 130, 40, 190, 80), palabra("PERRO", 200, 40, 300, 80),
+  palabra("EXENTO", 40, 150, 110, 170), palabra("DE", 115, 150, 135, 170), palabra("IVA", 140, 150, 175, 170)];
+
+casos.push(
+  {
+    nombre: "Supermaxi (Vision): afiliado grande, no afiliado, nombre, código",
+    texto: "PRODUCTO PARTICIPANTE\nALIM HUM PERRO\nCAR/VEG PU 85G\nAFILIADO US.$\nEXENTO DE IVA\n786212044084 - 00B6\n0.79\nNO AFILIADO\nUS.$0.85",
+    espera: { precio: 0.79, contenido: 85, unidad: "g", nombre: "ALIM HUM PERRO CAR/VEG PU 85G", precioNoAfiliado: 0.85, codigo: "7862120440844" },
+  },
+  {
+    nombre: "Supermaxi (Vision): centavos elevados leídos como palabras aparte",
+    texto: "ALIM HUM PERRO\nCAR/VEG PU 85G\nAFILIADO US.$\n79\nEXENTO DE IVA\n786212044084 - 00B6\n0.\nNO AFILIADO\nUS.$0.85",
+    pistas: extraerPistas({ words: [...comunes, palabra("0.", 700, 90, 770, 230), palabra("79", 780, 80, 840, 150), palabra("NO", 690, 250, 720, 270), palabra("US.$0.85", 700, 290, 800, 320)] }),
+    espera: { precio: 0.79, precioNoAfiliado: 0.85 },
+  },
+  {
+    nombre: "Supermaxi (Vision): «1 39» en su propia línea, después del código",
+    texto: "PURENATURE DOG\nPOLLO/VE 170GR\nAFILIADO US.$\nEXENTO DE IVA\n786212044038-00B6\n1 39\nNO AFILIADO\nUS.$1.49",
+    espera: { precio: 1.39, contenido: 170, unidad: "g", nombre: "PURENATURE DOG POLLO/VE 170GR", precioNoAfiliado: 1.49 },
+  },
+  {
+    nombre: "Supermaxi (Vision): «1» grande y «39» elevado, por las cajas de las palabras",
+    texto: "PURENATURE DOG\nPOLLO/VE 170GR\nAFILIADO US.$\n39\nEXENTO DE IVA\n786212044038-00B6\n1\nNO AFILIADO\nUS.$1.49",
+    pistas: extraerPistas({ words: [...comunes, palabra("1", 700, 120, 745, 320), palabra("39", 760, 110, 840, 230), palabra("US.$1.49", 700, 380, 800, 420)] }),
+    espera: { precio: 1.39, precioNoAfiliado: 1.49 },
+  },
+  {
+    nombre: "Supermaxi (Vision): «1.8U» (0 leído como U) y texto de la lata arriba",
+    texto: "ALIMENTO COMPLETO\nPER CANI ADULTI\nCOMPLETE PET FOOD FOR ADULT DOGS\nSIMBA 415GR\nEXENTO DE IVA\n600947000902 - 00B6\n1.8U\nNO AFILIADO\nUS.$1.93",
+    espera: { precio: 1.8, contenido: 415, unidad: "g", nombre: "SIMBA 415GR", precioNoAfiliado: 1.93, codigo: "6009470009029" },
+  },
+  {
+    nombre: "Supermaxi (Tesseract): «US.80.95» es US.$0.95, no $80.95; nombre sin basura",
+    texto: "ALIM HUM PERRO _n\n\nCARIVEG PU 856 0\n\n\"PEPE NO AFILIADO \" |\nesa US.80.95",
+    espera: { precio: 0.95, nombre: /^ALIM HUM PERRO/ },
+  },
+  {
+    nombre: "Supermaxi (Tesseract): «US 51.93» es US.$1.93 y el nombre es SIMBA 415GR",
+    texto: "—\nSIMBA 415GR 1 3U\nLio NO AFILIADO -\nsu 1 US 51.93",
+    espera: { precio: 1.93, contenido: 415, unidad: "g", nombre: "SIMBA 415GR" },
+  },
+  {
+    nombre: "Supermaxi (Tesseract): «US 149» es US.$1.49; nombre de las líneas antes de IVA",
+    texto: "ENATURE DOG 8\nLO/VE 170GR 1 0\nO DE IVA -\n2044038 — 0086 “ -\nLa] Le] NO AFILIADO\nES US 149",
+    espera: { precio: 1.49, contenido: 170, unidad: "g", nombre: "ENATURE DOG LO/VE 170GR" },
+  },
+);
+
 let fallos = 0;
 for (const c of casos) {
   const r = parseEtiqueta(c.texto, c.pistas || {});
   const errores = [];
   for (const [k, v] of Object.entries(c.espera)) {
     const got = r[k];
-    const ok = typeof v === "number" ? Math.abs(got - v) < 0.001 : got === v;
+    const ok = v instanceof RegExp ? v.test(got ?? "") : typeof v === "number" ? Math.abs(got - v) < 0.001 : got === v;
     if (!ok) errores.push(`${k}: esperaba ${JSON.stringify(v)}, salió ${JSON.stringify(got)}`);
   }
   if (errores.length) {

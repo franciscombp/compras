@@ -44,7 +44,8 @@ npm test
 
 - `tests/parser-test.mjs`: lectura de etiquetas (precios, packs, promos, unidades).
 - `tests/vivo-test.mjs`: agrupación de etiquetas y seguimiento entre fotogramas del barrido.
-- `tests/marco-test.mjs`: detector del marco de la etiqueta con estantes sintéticos (girada, amarilla, varias, reflejos, luz desigual, velocidad).
+- `tests/marco-test.mjs`: detector del marco de la etiqueta con estantes sintéticos (girada, amarilla, varias, reflejos, luz desigual, etiqueta sobre cartel de promoción, etiqueta tan blanca como el estante, velocidad).
+- `tests/parser-test.mjs` incluye etiquetas de Supermaxi tal como las lee Vision y como las leyó Tesseract en fotos reales (afiliado / no afiliado, centavos elevados, «US.80.95», «1.8U», nombre antes de «EXENTO DE IVA», código impreso).
 - `tests/ahorro-test.mjs`: memoria de precios, semáforo, recompra, tiendas, consejos y copia de seguridad, con tres meses de compras simuladas en cuatro tiendas. Si le pasas una ruta (`node tests/ahorro-test.mjs semilla.json`), guarda el `localStorage` resultante para cargarlo en el navegador.
 
 Para probar el lector con fotos o capturas reales, abre `/lab/etiquetas.html` con el servidor local (o en https://franciscombp.github.io/compras/lab/etiquetas.html). Muestra qué etiqueta detecta (en verde), el recorte que lee y lo que extrae.

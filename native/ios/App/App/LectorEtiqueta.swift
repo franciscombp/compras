@@ -25,17 +25,26 @@ enum LectorEtiqueta {
     /// `rapido` usa el nivel .fast de Vision (precios grandes, varias veces más
     /// veloz). `marco` busca la etiqueta y lee solo dentro de ella.
     static func leer(_ imagen: CGImage, rapido: Bool = false, marco: Bool = true) throws -> Lectura {
-        let rectReq = MarcoEtiqueta.peticion(maximo: 6)
+        let rectReq = MarcoEtiqueta.peticion(maximo: 8)
         let barrasReq = VNDetectBarcodesRequest()
+        // Pasada rápida de texto: solo para saber dónde están los números y
+        // elegir el rectángulo que de verdad contiene el precio.
+        let pistaReq = VNRecognizeTextRequest()
+        pistaReq.recognitionLevel = .fast
+        pistaReq.usesLanguageCorrection = false
         let handler = VNImageRequestHandler(cgImage: imagen, orientation: .up, options: [:])
-        try handler.perform(marco ? [rectReq, barrasReq] : [barrasReq])
+        try handler.perform(marco ? [rectReq, barrasReq, pistaReq] : [barrasReq])
 
         // Código de barras: solo numéricos de 8 a 14 dígitos (EAN/UPC).
         let codigo = (barrasReq.results ?? [])
             .compactMap { $0.payloadStringValue }
             .first { $0.count >= 8 && $0.count <= 14 && $0.allSatisfy(\.isNumber) }
 
-        if marco, let o = MarcoEtiqueta.principal(rectReq.results ?? []) {
+        let centrosConPrecio: [CGPoint] = (pistaReq.results ?? []).compactMap { obs in
+            guard let t = obs.topCandidates(1).first?.string, t.range(of: #"\d[.,]?\s?\d{2}"#, options: .regularExpression) != nil else { return nil }
+            return CGPoint(x: obs.boundingBox.midX, y: obs.boundingBox.midY)
+        }
+        if marco, let o = MarcoEtiqueta.etiqueta(rectReq.results ?? [], centrosConPrecio: centrosConPrecio) {
             let e = MarcoEtiqueta.esquinas(o)
             if let recto = MarcoEtiqueta.enderezar(CIImage(cgImage: imagen), esquinas: e),
                let cg = contextoCI.createCGImage(recto, from: recto.extent) {

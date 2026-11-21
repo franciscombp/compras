@@ -168,7 +168,15 @@ enum EtiquetasVivo {
             regiones.append(Region(caja: Caja(vision: vr), visionRect: vr, lineas: base.lineas,
                                    texto: base.texto, precio: base.precio, marco: e))
         }
-        return regiones.sorted { $0.caja.x0 < $1.caja.x0 }
+        // Etiqueta pegada sobre un cartel de promoción: los dos rectángulos
+        // tienen el precio dentro; vale el de adentro, que es la etiqueta.
+        let internas = regiones.filter { r in
+            !regiones.contains { otra in
+                guard let a = r.marco, let b = otra.marco else { return false }
+                return MarcoEtiqueta.dentro(b, de: a)
+            }
+        }
+        return internas.sorted { $0.caja.x0 < $1.caja.x0 }
     }
 
     /// Firma estable de una etiqueta: precio + primera palabra con letras.

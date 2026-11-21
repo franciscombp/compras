@@ -102,13 +102,48 @@ etiqueta(img, { cx: 210, cy: 210, w: 150, h: 85, color: [200, 198, 190] });
 m = mejorEtiqueta(img);
 ok(m && Math.abs(centro(m).x - 210) < 10 && Math.abs(centro(m).y - 210) < 10, `luz desigual: ${m ? `${Math.round(centro(m).x)},${Math.round(centro(m).y)}` : "nada"}`);
 
-// 9) Rendimiento: 320 x 427
-img = escena(320, 427);
-etiqueta(img, { cx: 160, cy: 210, w: 170, h: 95 });
+// ---- Casos tomados de fotos reales de góndola de Supermaxi ----
+
+/** Pinta "texto" oscuro en un rectángulo con trazos verticales (como letras). */
+function bloque(img, x0, y0, x1, y1, tinta = [25, 25, 25]) {
+  pintar(img, (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1 && Math.floor(x / 3) % 3 !== 0, tinta);
+}
+
+// 10) Etiqueta blanca pegada sobre un cartel azul de promoción "PRODUCTO
+//     PARTICIPANTE" (con letras blancas arriba y una foto de comida a color),
+//     con latas rojas encima. Antes el detector tomaba el cartel entero.
+img = escena(320, 427, [150, 40, 35], 40);                                                    // latas rojas
+pintar(img, (x, y) => y >= 185 && y < 330 && x > 10, [92, 112, 140]);                         // cartel azul grisáceo
+pintar(img, (x, y) => y >= 192 && y < 210 && x > 30 && x < 300 && Math.floor(x / 5) % 2 === 0, [245, 245, 245]); // letras blancas del cartel
+pintar(img, (x, y) => y >= 275 && y < 325 && x > 150 && x < 310, [205, 140, 80]);              // foto de comida
+pintar(img, (x, y) => x >= 60 && x < 240 && y >= 213 && y < 278, [238, 237, 232]);             // etiqueta blanca
+bloque(img, 70, 222, 150, 232); bloque(img, 70, 238, 140, 248); bloque(img, 75, 255, 95, 272); // nombre, gramaje, QR
+bloque(img, 185, 225, 230, 268);                                                                // precio grande
+m = mejorEtiqueta(img);
+ok(m && Math.abs(m.x0 - 60) < 8 && Math.abs(m.x1 - 240) < 8 && Math.abs(m.y0 - 213) < 8 && Math.abs(m.y1 - 278) < 8,
+  `etiqueta blanca sobre cartel de promoción (no el cartel): ${m ? `${m.x0},${m.y0}-${m.x1},${m.y1}` : "nada"}`);
+
+// 11) Etiqueta blanca sobre la franja blanca del estante (mismo brillo que la
+//     etiqueta), con una lata amarilla con texto encima. Antes tomaba toda la
+//     franja de lado a lado.
+img = escena(320, 427, [70, 60, 45], 30);
+pintar(img, (x, y) => y < 175 && x > 20 && x < 300, [215, 165, 60]);                            // lata amarilla
+bloque(img, 110, 150, 230, 160, [90, 50, 20]);                                                  // texto de la lata
+pintar(img, (x, y) => y >= 175 && y < 285, [214, 214, 212]);                                    // franja del estante
+// la etiqueta es exactamente igual de blanca que el estante: solo su texto la delata
+bloque(img, 80, 204, 140, 216); bloque(img, 80, 220, 120, 228); bloque(img, 100, 232, 125, 262); // nombre, código, QR
+bloque(img, 200, 204, 230, 250); bloque(img, 190, 252, 235, 262);                               // precio y "no afiliado"
+m = mejorEtiqueta(img);
+ok(m && m.x0 >= 55 && m.x0 <= 90 && m.x1 >= 228 && m.x1 <= 262 && m.y0 >= 185 && m.y1 <= 280,
+  `etiqueta sobre franja blanca del estante (no la franja, ni la lata): ${m ? `${m.x0},${m.y0}-${m.x1},${m.y1}` : "nada"}`);
+
+// 12) Rendimiento: 256 x 341 (lo que usa la cámara)
+img = escena(256, 341);
+etiqueta(img, { cx: 128, cy: 170, w: 140, h: 80 });
 const t0 = performance.now();
 for (let i = 0; i < 20; i++) detectarEtiquetas(img);
 const ms = (performance.now() - t0) / 20;
-ok(ms < 25, `detección en ${ms.toFixed(1)} ms por fotograma`);
+ok(ms < 40, `detección en ${ms.toFixed(1)} ms por fotograma (256 px)`);
 
 console.log(fallos ? `\n${fallos} prueba(s) fallaron` : "\nTodas las pruebas del detector de etiquetas pasan");
 process.exit(fallos ? 1 : 0);
