@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v21-armazon";
+const CACHE_VERSION = "v22-ios-swiftui";
 const CACHE_NAME = `quanto-${CACHE_VERSION}`;
 const SCOPE = new URL('.', self.location).pathname;
 

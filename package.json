@@ -6,9 +6,10 @@
   "scripts": {
     "serve": "python3 -m http.server 8000 --directory web",
     "serve:https": "python3 scripts/servidor-https.py",
-    "test": "node tests/parser-test.mjs && node tests/vivo-test.mjs && node tests/marco-test.mjs && node tests/ahorro-test.mjs && node tests/compat-test.mjs",
+    "test": "node tests/parser-test.mjs && node tests/vivo-test.mjs && node tests/marco-test.mjs && node tests/ahorro-test.mjs && node tests/compat-test.mjs && node tests/logica-ios-test.mjs",
     "catalogo": "node scripts/fetch-catalogo.mjs",
-    "ios": "npm --prefix native install && npm --prefix native run ios",
+    "logica:ios": "node scripts/logica-ios.mjs",
+    "ios": "node scripts/logica-ios.mjs && cd ios && xcodegen generate && open Quanto.xcodeproj",
     "worker:dev": "npm --prefix worker install && npm --prefix worker run dev"
   }
 }

@@ -1,8 +1,10 @@
 /**
  * Puente con la plataforma nativa.
  *
- * Única puerta por la que la web habla con el dispositivo. En iOS la
- * implementa el plugin QuantoNativo (native/ios/App/App/QuantoNativoPlugin.swift):
+ * Única puerta por la que la web habla con el dispositivo cuando corre dentro
+ * de un contenedor nativo (Capacitor). La app de iPhone ya es SwiftUI (ios/) y
+ * no usa este puente; queda para un Android con Capacitor. Antes lo implementaba
+ * el plugin QuantoNativo:
  * Vision para OCR y código de barras, Apple Intelligence para interpretar.
  * En web todo devuelve null/false y la app usa sus alternativas (lector IA
  * remoto, Tesseract, parser local, textos fijos). Para Android basta con

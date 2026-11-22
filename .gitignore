@@ -8,6 +8,6 @@
 
 # Dependencias y artefactos de build
 node_modules/
-native/dist/
+ios/build/
 worker/.wrangler/
 worker/.dev.vars

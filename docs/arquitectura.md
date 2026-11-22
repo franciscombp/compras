@@ -1,21 +1,23 @@
 # Arquitectura
 
-Quanto es una app web sin build ni servidor. Los datos viven en el dispositivo (`localStorage`). La misma web corre en el navegador, instalada como PWA y dentro de la app de iPhone, donde además usa Vision y Apple Intelligence a través de un plugin nativo.
+Quanto es una app web sin build ni servidor, más una app de iPhone en SwiftUI. Los datos viven en el dispositivo. La web corre en el navegador o instalada como PWA. La app de iPhone tiene interfaz nativa pero ejecuta la misma lógica de la web (parser, datos y motor de ahorro) con JavaScriptCore, y suma Vision, Apple Intelligence, Recordatorios y Siri.
 
 `CLAUDE.md` tiene la referencia técnica completa. Este documento es el resumen.
 
 ## Piezas
 
 ```
-web/                        native/ios/App/App/              worker/
- index.html                  QuantoNativoPlugin.swift ◄──┐    src/index.js
- assets/app.js  ──────────►  LectorEtiqueta.swift        │    (Claude lee la foto)
- assets/ocr.js               AppleIA.swift               │        ▲
- assets/vivo.js              Recordatorios.swift         │        │
- data/store.js               BarridoView / Modelo        │        │
- data/ahorro.js              EtiquetasVivo.swift         │        │
- data/nativo.js ─────────────────────────────────────────┘        │
- data/api.js ─────────────────────────────────────────────────────┘
+web/                         ios/Quanto/ (SwiftUI)                  worker/
+ index.html, assets/app.js    Vistas/ (Inicio, Comparar, Listas,     src/index.js
+ assets/ocr.js   ──┐            Ahorro, Ajustes, Escáner)            (Claude lee la foto)
+ data/store.js   ──┼─ scripts/logica-ios.mjs ─► Recursos/logica.js       ▲
+ data/ahorro.js  ──┘                              │ JavaScriptCore       │
+ data/api.js ──────────────────────────┐          ▼                      │
+                                       │        Nucleo/MotorJS + Datos   │
+                                       │        Camara/ (Vision, marco)  │
+                                       │        Servicios/ (Apple        │
+                                       │          Intelligence, EventKit)│
+                                       └─────────────────────────────────┘
 ```
 
 ## Capas de la web
@@ -45,6 +47,6 @@ En orden de preferencia:
 
 Antes de leer, se busca el **marco de la etiqueta** (como el escáner de documentos) y se lee solo lo de adentro, para no mezclar el precio con otros carteles del estante.
 
-1. **App de iPhone**: Vision detecta el rectángulo, lo endereza y lee el texto y el código de barras; Apple Intelligence lo interpreta si el teléfono lo soporta. El modo *Barrido* usa una cámara SwiftUI que analiza cada fotograma.
+1. **App de iPhone** (SwiftUI): Vision detecta el rectángulo, lo endereza y lee el texto y el código de barras en cada fotograma; el texto pasa por el mismo parser de `ocr.js` (en JavaScriptCore) y Apple Intelligence afina nombre, contenido y pack si el teléfono lo soporta. Ver `ios/README.md`.
 2. **Lector con Claude**: si se configuró el Worker y hay conexión.
 3. **Tesseract** en el navegador, con el parser de `ocr.js`.

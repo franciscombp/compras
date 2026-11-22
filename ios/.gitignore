@@ -1,0 +1,6 @@
+# Los genera XcodeGen desde project.yml (npm run ios)
+Quanto.xcodeproj/
+Quanto/Info.plist
+build/
+DerivedData/
+xcuserdata/

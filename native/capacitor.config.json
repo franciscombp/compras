@@ -1,9 +1,0 @@
-{
-  "appId": "app.quanto.compras",
-  "appName": "Quanto",
-  "webDir": "dist",
-  "ios": {
-    "contentInset": "never",
-    "preferredContentMode": "mobile"
-  }
-}

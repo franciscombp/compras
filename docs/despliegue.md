@@ -4,7 +4,7 @@
 
 La app está en https://franciscombp.github.io/compras/ y se publica con GitHub Actions, no "desde una rama".
 
-- El workflow `.github/workflows/static.yml` sube **solo la carpeta `web/`** a Pages. Lo demás (`native/`, `worker/`, `tests/`, `docs/`) queda en el repositorio pero no se publica.
+- El workflow `.github/workflows/static.yml` sube **solo la carpeta `web/`** a Pages. Lo demás (`ios/`, `worker/`, `tests/`, `docs/`) queda en el repositorio pero no se publica.
 - Se ejecuta en cada push a `main`, a mano desde la pestaña *Actions* y después de cada actualización del catálogo.
 - En *Settings → Pages*, la opción *Source* debe estar en **GitHub Actions**. Si alguien la cambia a *Deploy from a branch*, la web deja de actualizarse.
 
@@ -21,7 +21,7 @@ El workflow `.github/workflows/actualizar-catalogo.yml` corre cada lunes a las 0
 
 ## App de iPhone
 
-No se publica sola. Se compila en un Mac con Xcode desde `native/` (ver `native/README.md`). Para distribuirla hay que pasar por TestFlight o la App Store.
+No se publica sola. Se compila en un Mac con Xcode desde `ios/` con `npm run ios` (ver `ios/README.md`). Para distribuirla hay que pasar por TestFlight o la App Store.
 
 ## Worker con Claude
 

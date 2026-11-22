@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Live**: https://franciscombp.github.io/compras/
 - **Architecture**: HTML + vanilla JavaScript + localStorage (no build, no dependencies)
+- **iPhone app**: native SwiftUI in `ios/` that runs the same logic (`ocr.js`, `store.js`, `ahorro.js`) through JavaScriptCore; see "iOS app" below
 - **Design system**: Red color scheme (#c41e1e) inspired by Supermaxi/Comisariato supermarkets
 - **Offline**: Service Worker with network-first caching strategy
 
@@ -24,17 +25,19 @@ npm run serve:https    # https://localhost:4443 for camera/dictation from a phon
 
 Then open `http://localhost:8000/`
 
-### Build the iOS app (Mac only)
+### Build the iOS app (Mac only, needs Xcode 16+ and `brew install xcodegen`)
 
 ```bash
-npm run ios   # copies web/ into native/dist, syncs Capacitor, opens Xcode
+npm run ios         # regenerates ios/Quanto/Recursos/logica.js, runs XcodeGen, opens Xcode
+npm run logica:ios  # only regenerates logica.js (run it after changing ocr.js, store.js or ahorro.js)
 ```
 
 ### Key development workflows
 
 - **Clear Service Worker cache**: Change `CACHE_VERSION` in `web/assets/sw.js` to force a fresh cache
 - **Validate JavaScript syntax**: `node -c web/assets/app.js`
-- **Run the logic tests**: `npm test` (parser, live sweep, label frame detector, savings engine in `tests/`)
+- **Run the logic tests**: `npm test` (parser, live sweep, label frame detector, savings engine, compatibility scan, iOS logic bundle in `tests/`)
+- **After changing `ocr.js`, `store.js` or `ahorro.js`**: run `npm run logica:ios` and commit `ios/Quanto/Recursos/logica.js`; `npm test` fails while it is stale
 - **Check for smart quotes**: `grep -P '[""''«»‹›„‚]' web/assets/app.js` (causes syntax errors)
 - **Commit and deploy**: merge to `main` → `.github/workflows/static.yml` publishes only `web/` to GitHub Pages (Pages source must be "GitHub Actions"). See `docs/despliegue.md`
 
@@ -51,7 +54,7 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 
 ```
 /
-├── package.json            # Shortcuts only (serve, test, catalogo, ios, worker:dev); no dependencies
+├── package.json            # Shortcuts only (serve, test, catalogo, logica:ios, ios, worker:dev); no dependencies
 ├── web/                    # The PWA. Only this folder is published to GitHub Pages
 │   ├── index.html          # App shell (5 screens, modals, navbar)
 │   ├── manifest.json       # PWA metadata (start_url/scope /compras/)
@@ -66,24 +69,34 @@ When adding input fields, always include `autocomplete="off"` to prevent credit 
 │   │   ├── store.js        # Data layer: localStorage + sync queue + price memory, budgets, settings, backup
 │   │   ├── ahorro.js       # Savings engine: product stats, price traffic light, summary, frequents, store comparison, tips (pure, tested)
 │   │   ├── api.js          # searchProduct (local catalog) + searchByBarcode (Open Food Facts) + leerEtiqueta (Worker)
-│   │   ├── nativo.js       # Bridge to the native plugin (QuantoNativo); returns null/false on the web
+│   │   ├── nativo.js       # Bridge to a Capacitor plugin (QuantoNativo); legacy, the SwiftUI app does not use it; returns null/false on the web
 │   │   └── catalogo.json   # Product catalog: seed + weekly GitHub Action updates
 │   └── lab/etiquetas.html  # Internal label-testing page (not linked from the app): upload photos, see OCR + parse results
 ├── tests/                  # Node tests of the pure logic, run with `npm test`
 │   ├── parser-test.mjs     # Label parser
 │   ├── vivo-test.mjs       # Live sweep clustering + tracking
 │   ├── marco-test.mjs      # Label frame detector on synthetic shelves (rotated, yellow, distractors, uneven light, tag on a promo card, tag as white as the shelf, speed)
-│   └── ahorro-test.mjs     # Savings engine; `node tests/ahorro-test.mjs seed.json` dumps localStorage as a seed for browser tests
+│   ├── ahorro-test.mjs     # Savings engine; `node tests/ahorro-test.mjs seed.json` dumps localStorage as a seed for browser tests
+│   ├── compat-test.mjs     # Static scan of web/ for JS/CSS that breaks on iOS 15 / Chrome 90 (lookbehind, color-mix, dvh without fallback, inputs < 16 px…)
+│   └── logica-ios-test.mjs # logica.js is up to date and works with no DOM, only through QuantoLlamar
 ├── scripts/
+│   ├── logica-ios.mjs      # Bundles ocr.js + store.js + ahorro.js into ios/Quanto/Recursos/logica.js (classic script for JavaScriptCore)
 │   ├── fetch-catalogo.mjs  # Catalog fetcher (weekly GitHub Action, or `npm run catalogo`) -> web/data/catalogo.json
 │   ├── catalogo-report.json# Per-source report written by the fetcher
 │   └── servidor-https.py   # HTTPS dev server for web/ (mkcert certs in repo root, gitignored)
 ├── worker/                 # Optional Cloudflare Worker: label reader with Claude (see worker/README.md)
 │   ├── src/index.js        # POST {imagen, tipo} -> {precio, contenido, unidad, unidades, nombre, confianza}
 │   └── wrangler.toml       # ORIGENES_PERMITIDOS, MODELO; secrets: ANTHROPIC_API_KEY, LECTOR_TOKEN
-├── native/                 # iOS app: Capacitor + Vision + Apple Intelligence (see native/README.md)
-│   ├── scripts/build-web.mjs       # copies web/ to native/dist (no Service Worker)
-│   └── ios/App/App/*.swift         # QuantoNativoPlugin (bridge), LectorEtiqueta (Vision OCR + barcode, reads only inside the label frame), MarcoEtiqueta (VNDetectRectanglesRequest + perspective correction), AppleIA (Foundation Models), Recordatorios (EventKit), BarridoView/BarridoModelo/EtiquetasVivo (SwiftUI camera sweep)
+├── ios/                    # iPhone app in SwiftUI (see ios/README.md)
+│   ├── project.yml         # XcodeGen project (iOS 17+, iPhone, bundle app.quanto.compras); Quanto.xcodeproj and Info.plist are generated, not committed
+│   └── Quanto/
+│       ├── App/            # QuantoApp (@main), RaizView (TabView), Navegacion (@Observable tab/scanner/routes)
+│       ├── Nucleo/         # MotorJS (JSContext + logica.js, localStorage volcado a datos.json), Datos (@Observable facade), Modelos (Codable), Migracion (old Capacitor data), Catalogo, Formato
+│       ├── Camara/         # BarridoModelo/BarridoView (AVFoundation + Vision sweep), EtiquetasVivo (port of vivo.js), MarcoEtiqueta, LectorEtiqueta
+│       ├── Servicios/      # AppleIA (Foundation Models, typed results), Recordatorios (EventKit)
+│       ├── Vistas/         # Inicio, Comparar (+Comparador model), Escaner (+EscanerSesion), Listas, ListaDetalle, items, Ahorro (Charts), Ajustes, Componentes
+│       ├── Atajos/         # App Intents for Siri/Shortcuts
+│       └── Recursos/       # logica.js (GENERATED by scripts/logica-ios.mjs), Assets.xcassets
 ├── docs/                   # Spanish docs: arquitectura, desarrollo, despliegue, api-contract
 └── .github/
     ├── workflows/static.yml              # Publishes web/ to Pages on push to main, manual, and after the catalog bot
@@ -139,7 +152,8 @@ All paths below in this file are relative to `web/` unless they start with anoth
 - `leerEtiqueta(canvas)`: sends the label photo to the Worker in `worker/` and returns the same shape as `parseEtiqueta`. Config (URL + optional token) lives in localStorage via `getLectorConfig()` / `setLectorConfig()`; `lectorDisponible()` is true when a URL is set and the device is online
 - Stubs for phase 2: `compareOnline(productos)`, `syncData(items)`
 
-**5b. Native bridge** (`data/nativo.js`)
+**5b. Native bridge** (`data/nativo.js`, legacy)
+- Written for the former Capacitor iOS app; the iPhone app is now SwiftUI (`ios/`) and does not load the web. Kept for a possible Android Capacitor build
 - Single entry point to the device. `esNativo()`, `capacidades()` (cached: vision, codigoBarras, barrido, recordatorios, compartir, appleIntelligence, plataforma), `leerEtiquetaNativa(canvas, {rapido, nivelRapido, ladoMax})`, `interpretarEtiqueta(texto)`, `interpretarProducto(frase)`, `explicarComparacion(resumen)` (cached by text), `haptico(tipo)`, `mantenerPantalla(activo)`, `exportarRecordatorios(lista, items)`, `importarRecordatorios(lista)`, `compartir(texto, titulo)` (native sheet, else `navigator.share`, else clipboard)
 - On the web every function returns `null`/`false` and `app.js` falls back to local logic. Android would implement the same Capacitor plugin name and methods
 - `app.js` adds `html.nativo` at startup; `tokens.css` uses it for native-only tweaks. Anything written by Apple Intelligence is shown with a leading ✦ (`.ia-nota`)
@@ -166,6 +180,8 @@ Event delegation handles:
 - `[data-quick]`, `[data-unit]` → quick input changes
 
 ### Comparador OCR (Camera Comparison)
+
+The native paths below ("Barrido nativo", iOS `LectorEtiqueta` through `nativo.js`) describe the former Capacitor app and remain in `app.js` for a possible Android build. The current iPhone flow is in "iOS app" below.
 
 Two modes on the camera screen, chosen with the chips on the stage and remembered in localStorage (`quanto.scan_modo`):
 
@@ -205,6 +221,17 @@ List options (⋯) also offer: name, store and budget; **Enviar a Recordatorios*
 - **Precios**: searchable list of every product in the memory with sparkline, trend arrow and minimum; tap → `openPrecioSheet` with stores and history
 - **Compras**: closed lists with total paid vs expected (immutable)
 - Home shows a compact version (`renderHomeAhorro`, `renderHomeRecompra`) and the settings button (`openAjustesSheet`: habitual store, default budget, Lector IA on web, backup export/import)
+
+## iOS app (SwiftUI, `ios/`)
+
+- **One logic, two UIs**: `scripts/logica-ios.mjs` turns `ocr.js`, `store.js` and `ahorro.js` into one classic script (each module in its own function, imports resolved) plus an in-memory `localStorage` (`QuantoAlmacen.cargar/volcar/sucio`) and `QuantoLlamar(nombre, argsJSON) → JSON {r}`. Extra helpers there: `leerVision(texto, palabras, precioRespaldo)` and `importarDesdeWeb(crudo)`. Never edit `logica.js` by hand
+- **MotorJS** (`@MainActor`): loads `logica.js`, `llamar(fn, args)` / `valor(T.self, fn, args)` (decoder uses `.convertFromSnakeCase`), persists to `Application Support/Quanto/datos.json` after every write (same `justo:*` keys as the web, so backups are interchangeable)
+- **Datos** (`@MainActor @Observable`, `Datos.compartido`): every read touches `revision`, every write bumps it, so SwiftUI re-renders. Views get it with `@Environment(Datos.self)`; sheets and covers re-inject with `.entorno()`
+- **Comparador** (`@Observable`): `filas` (manual or scanned), `ranking(datos)`, `afinar()` (Apple Intelligence rereads name/content/pack, never price; barcode → Open Food Facts). **EscanerSesion** feeds confirmed labels from `BarridoModelo` into it and sends chips back to the overlay
+- **Migration**: same bundle id as the Capacitor app, so `MigracionWeb` opens a hidden WKWebView on `capacitor://localhost`, reads `justo:*` from its localStorage and merges by id (first launch, or Ajustes → Traer datos de la versión anterior)
+- **Apple Intelligence** (`AppleIA`, iOS 26+, guarded by `canImport(FoundationModels)`): typed `Etiqueta`, `Producto`, `Nota`; everything it writes is shown with ✦ (`NotaIA`)
+- **Siri / Shortcuts** (`Atajos/`): add to list (with phrase parsing), open scanner, list total
+- Swift style: Spanish names, iOS 17 APIs (Observation, `ContentUnavailableView`, `sensoryFeedback`, Charts), Swift 5 language mode. Closures that `BarridoModelo` calls on the main thread wrap MainActor work in `MainActor.assumeIsolated`
 
 ## Important Implementation Details
 

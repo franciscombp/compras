@@ -42,7 +42,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Solo la app web: native/, worker/, docs/ y tests/ no se publican
+          # Solo la app web: ios/, worker/, docs/ y tests/ no se publican
           path: 'web'
       - name: Deploy to GitHub Pages
         id: deployment
